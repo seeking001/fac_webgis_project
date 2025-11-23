@@ -1,0 +1,31 @@
+# 依赖文件
+node_modules/
+
+# 环境配置
+.env
+.env.*
+!.env.example
+
+# 日志文件
+*.log
+logs/
+
+# 运行时文件
+dist/
+build/
+*.tmp
+*.temp
+
+# 编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# Docker相关（可选，根据需求调整）
+# database/data/
+# geoserver_data/
