@@ -17,8 +17,13 @@ import { onMounted, onUnmounted, ref } from 'vue';
 // 引入openlayers组件
 import { Map, View } from 'ol';
 import TileLayer from 'ol/layer/Tile';
+import Feature from 'ol/Feature.js';
 import { fromLonLat } from 'ol/proj';
 import XYZ from 'ol/source/XYZ';
+import VectorSource from 'ol/source/Vector';
+import VectorLayer from 'ol/layer/Vector';
+import { Style, Circle, Fill, Stroke } from 'ol/style';
+import { Point } from 'ol/geom';
 
 // 引入状态管理和工具模块
 import { useMapDataStore } from '../stores/mapData'
@@ -63,9 +68,54 @@ function initializeMap(){
   })
 }
 
+// 创建获取设施函数
+let facilitiesLayer = null;
 async function loadFacilities(){
   const bbox = getMapBbox(map);
   await mapDataStore.loadFacilities(bbox);
+
+  // 获取设施数据
+  const facilities = mapDataStore.facilities;
+
+  // 创建矢量源
+  const vectorSource = new VectorSource();
+
+  // 遍历设施数据，将每个设施点添加到矢量源
+  facilities.forEach(facility => {
+    const coordinates = facility.geometry.coordinates;
+    const point = new Point(fromLonLat(coordinates));
+
+    const feature = new Feature({
+      geometry: point,
+      name: facility.name,
+      type: facility.type
+    });
+
+    vectorSource.addFeature(feature);
+  });
+
+  // 如果已经存在设施图层，则先移除
+  if(facilitiesLayer) {
+    map.removeLayer(facilitiesLayer);
+  }
+
+  // 创建新的矢量图层
+  facilitiesLayer = new VectorLayer({
+    source: vectorSource,
+    style: new Style({
+      image: new Circle({
+        radius: 6,
+        fill: new Fill({ color: 'red' }),
+        stroke: new Stroke({
+          color: 'white',
+          width: 1.5
+        })
+      })
+    })
+  });
+
+  // 将矢量图层添加到地图
+  map.addLayer(facilitiesLayer);
 }
 </script>
 

@@ -1,15 +1,3 @@
-/**
- * 数据库初始化脚本 - 01_init_tables.sql
- * 
- * 这个脚本负责：
- * 1. 创建PostGIS扩展（启用空间数据库功能）
- * 2. 创建数据表结构
- * 3. 创建空间索引（提高查询性能）
- * 4. 插入示例数据
- * 
- * 类比规划概念：这就像规划局新建一个档案库，建立分类体系并放入示例档案
- */
-
 -- 启用PostGIS扩展
 -- PostGIS为PostgreSQL添加了空间数据支持，就像给档案库配备了地图存储能力
 CREATE EXTENSION IF NOT EXISTS postgis;
@@ -44,39 +32,6 @@ CREATE TABLE IF NOT EXISTS public_facilities (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- 创建土地利用表
--- 这个表存储不同性质的土地使用情况
-CREATE TABLE IF NOT EXISTS land_use (
-    -- 自增主键
-    id SERIAL PRIMARY KEY,
-    
-    -- 用地类型：教育用地、医疗用地、公共绿地等
-    land_type VARCHAR(100) NOT NULL,
-    
-    -- 面积（平方米），使用数值类型保留2位小数
-    area_sqm NUMERIC(12, 2),
-    
-    -- 空间几何字段：面类型，使用WGS84坐标系
-    -- 这个字段存储地块的边界范围
-    geom GEOMETRY(Polygon, 4326)
-);
-
--- ===== 创建索引 =====
--- 索引就像档案库的检索目录，可以大幅提高查询速度
-
--- 为设施表的空间字段创建GIST索引
--- GIST是PostgreSQL的通用索引类型，特别适合空间数据
-CREATE INDEX IF NOT EXISTS idx_facilities_geom ON public_facilities USING GIST(geom);
-
--- 为土地利用表的空间字段创建GIST索引
-CREATE INDEX IF NOT EXISTS idx_land_use_geom ON land_use USING GIST(geom);
-
--- 为设施类型字段创建B-tree索引（适合等值查询）
-CREATE INDEX IF NOT EXISTS idx_facilities_type ON public_facilities(type);
-
--- ===== 插入示例数据 =====
--- 这些数据用于开发和测试，就像在档案库中放入示例档案
-
 -- 插入深圳市部分公共服务设施数据
 INSERT INTO public_facilities (name, type, address, capacity, admin_region, geom) VALUES
     -- 深圳中学 - 罗湖区
@@ -99,46 +54,13 @@ INSERT INTO public_facilities (name, type, address, capacity, admin_region, geom
     ('荔枝公园', 'park', '福田区红岭中路1001号', 500, '福田区', 
      ST_GeomFromText('POINT(114.097 22.545)', 4326)),
     
-    -- 福田区体育中心 - 福田区
-    ('福田区体育中心', 'sports', '福田区笋岗西路', 3000, '福田区', 
-     ST_GeomFromText('POINT(114.067 22.558)', 4326)),
-    
-    -- 宝安中心医院 - 宝安区
-    ('宝安中心医院', 'hospital', '宝安区龙井二路118号', 1200, '宝安区', 
-     ST_GeomFromText('POINT(113.883 22.577)', 4326)),
-    
-    -- 南山外国语学校 - 南山区
-    ('南山外国语学校', 'school', '南山区文华路', 2500, '南山区', 
-     ST_GeomFromText('POINT(113.937 22.532)', 4326))
-    
 -- 如果遇到主键冲突则忽略（避免重复插入）
 ON CONFLICT DO NOTHING;
-
--- 插入示例土地利用数据
--- 这些数据代表不同性质的土地使用区块
-INSERT INTO land_use (land_type, area_sqm, geom) VALUES
-    -- 教育用地 - 一个矩形区域
-    ('教育用地', 50000, 
-     ST_GeomFromText('POLYGON((114.100 22.550, 114.110 22.550, 114.110 22.555, 114.100 22.555, 114.100 22.550))', 4326)),
-    
-    -- 医疗用地 - 另一个矩形区域
-    ('医疗用地', 30000, 
-     ST_GeomFromText('POLYGON((114.060 22.550, 114.070 22.550, 114.070 22.555, 114.060 22.555, 114.060 22.550))', 4326)),
-    
-    -- 公共绿地 - 公园绿地
-    ('公共绿地', 80000, 
-     ST_GeomFromText('POLYGON((114.090 22.540, 114.100 22.540, 114.100 22.545, 114.090 22.545, 114.090 22.540))', 4326))
-    
--- 避免重复插入
-ON CONFLICT DO NOTHING;
-
--- ===== 创建视图 =====
--- 视图就像档案库的特定检索视图，可以简化复杂查询
 
 -- 创建公共服务设施视图，便于GeoServer发布
 -- GeoServer是开源地图服务器，可以通过这个视图直接发布WFS服务
 CREATE OR REPLACE VIEW public_facilities_view AS
-SELECT 
+SELECT
     id,
     name,
     type,

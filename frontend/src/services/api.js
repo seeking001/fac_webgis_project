@@ -10,7 +10,7 @@ async function request(url, options = {}) {
 
   // 默认请求配置
   const defaultOptions = {
-    Headers: {
+    headers: {
       'Content-Type': 'application/json'
     }
   };
@@ -19,7 +19,7 @@ async function request(url, options = {}) {
   const config = { ...defaultOptions, ...options };
 
   // 发送网络请求
-  const response = await fatch(fullUrl, config);
+  const response = await fetch(fullUrl, config);
 
   // 解析JSON格式的响应体
   const data = await response.json();
@@ -34,8 +34,9 @@ export async function getFacilities(bbox = null) {
   // 如果提供了边界框,就添加到URL参数中
   if (bbox && bbox.length === 4) {
     const [minLng, minLat, maxLng, maxLat] = bbox;
+    // 构建查询参数：bbox=minLng,minLat,maxLng,maxLat
     url += `?bbox=${minLng},${minLat},${maxLng},${maxLat}`;
   }
 
-  return request(usr);
+  return request(url);
 }
