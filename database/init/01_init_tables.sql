@@ -71,5 +71,34 @@ SELECT
     geom
 FROM public_facilities;
 
--- 注释：视图不存储数据，只是保存了查询语句
--- 当查询视图时，实际上执行的是视图定义的SELECT语句
+
+-- 创建土地利用表
+CREATE TABLE IF NOT EXISTS land_use (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    area FLOAT,
+    admin_region VARCHAR(100),
+    geom GEOMETRY(Polygon, 4326),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 插入示例土地利用数据
+INSERT INTO land_use (name, type, area, admin_region, geom) VALUES
+    ('商业用地', 'commercial', 50000, '福田区', ST_GeomFromText('POLYGON((114.055 22.540, 114.060 22.540, 114.060 22.545, 114.055 22.545, 114.055 22.540))', 4326)),
+    ('居住用地', 'residential', 80000, '罗湖区', ST_GeomFromText('POLYGON((114.100 22.550, 114.110 22.550, 114.110 22.560, 114.100 22.560, 114.100 22.550))', 4326)),
+    ('工业用地', 'industrial', 120000, '南山区', ST_GeomFromText('POLYGON((113.920 22.500, 113.940 22.500, 113.940 22.520, 113.920 22.520, 113.920 22.500))', 4326)),
+    ('公园绿地', 'green_space', 30000, '宝安区', ST_GeomFromText('POLYGON((113.880 22.570, 113.900 22.570, 113.900 22.590, 113.880 22.590, 113.880 22.570))', 4326))
+ON CONFLICT DO NOTHING;
+
+-- 创建土地利用视图，便于GeoServer发布
+CREATE OR REPLACE VIEW land_use_view AS
+SELECT
+    id,
+    name,
+    type,
+    area,
+    admin_region,
+    created_at,
+    geom
+FROM land_use;

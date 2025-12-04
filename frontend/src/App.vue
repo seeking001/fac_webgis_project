@@ -1,7 +1,7 @@
 <template>
   <div id="app">
     <h2>龙华区公共服务设施规划管理系统</h2>
-    <BaseMap />
+    <BaseMap/>
   </div>
 </template>
 

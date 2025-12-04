@@ -29,7 +29,7 @@ async function request(url, options = {}) {
 
 // 导出公共服务设施的api
 export async function getFacilities(bbox = null) {
-  let url = '/facilities';
+  let url = '/facilities';  // 默认的API路径，与app.js中app.use('/api/facilities', facilitiesRoutes);保持一致
 
   // 如果提供了边界框,就添加到URL参数中
   if (bbox && bbox.length === 4) {
@@ -38,5 +38,15 @@ export async function getFacilities(bbox = null) {
     url += `?bbox=${minLng},${minLat},${maxLng},${maxLat}`;
   }
 
+  return request(url);
+}
+
+// 导出土地利用的api
+export async function getLandUse(bbox = null) {
+  let url = '/landUse';
+  if (bbox && bbox.length === 4) {
+    const [minLng, minLat, maxLng, maxLat] = bbox;
+    url += `?bbox=${minLng},${minLat},${maxLng},${maxLat}`;
+  }
   return request(url);
 }

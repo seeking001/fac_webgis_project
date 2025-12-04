@@ -5,14 +5,15 @@ require('dotenv').config();  // 加载环境变量
 
 // 引入数据库连接测试和路由模块
 const { testConnection } = require('./config/database');
-const facilitiesRoutes = require('./routes/facilities');
+const facilityRoutes = require('./routes/facilityRouter');
+const landUseRoutes = require('./routes/landUseRouter');
 
 // 创建express应用实例
 const app = express();
 const PORT = process.env.SERVER_PORT || 3000;  // 设置服务端口
 
 // 配置中间件
-// CORS跨域中间件——允许前端应用访问后端服务
+// CORS跨域中间件：允许前端应用访问后端服务
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173'  // 前端开发服务器地址
 }));
@@ -22,7 +23,9 @@ app.use(express.json());
 
 // 配置路由
 // 公共服务设施路由
-app.use('/api/facilities', facilitiesRoutes);
+app.use('/api/facilities', facilityRoutes);
+// 土地利用路由
+app.use('/api/landUse', landUseRoutes);
 
 // 创建服务器启动函数
 const startServer = async () => {
