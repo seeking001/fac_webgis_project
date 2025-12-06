@@ -2,10 +2,38 @@
   <div class="map-wrapper">
     <div class="map-controls">
       <h3>地图控制</h3>
+
+      <!-- 加载数据控制 -->
       <div class="control-item">
         <h4>加载数据：</h4>
         <button @click="loadFacilities">公共设施</button>
         <button @click="loadLandUse">土地利用</button>
+      </div>
+
+      <!-- 设施类型显示控制 -->
+      <div class="control-type">
+        <h4>显示类型：</h4>
+        <div>
+          公共设施
+          <select v-model="selectedFacilityType" @change="updateFacilityLayer">
+            <option value="all">全部类型</option>
+            <option value="school">学校</option>
+            <option value="hospital">医院</option>
+            <option value="library">图书馆</option>
+            <option value="stadium">体育馆</option>
+            <option value="park">公园</option>
+          </select>
+        </div>
+        <div>
+          土地利用
+          <select v-model="selectedLandUseType" @change="updateLandUseLayer">
+            <option value="all">全部类型</option>
+            <option value="commercial">商业用地</option>
+            <option value="residential">居住用地</option>
+            <option value="industrial">工业用地</option>
+            <option value="green_space">公园绿地</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -18,6 +46,28 @@
         <div class="status-info">
           <h4>加载状态</h4>
           <div>✅ 公共设施 {{ facilitiesCount }} 个，土地利用 {{ landUseCount }} 个</div>
+        </div>
+      </div>
+      
+      <!-- 点击设施要素弹窗 -->
+      <div v-if="selectedFeature && popupPosition" :style="{left: popupPosition.x + 'px', top: popupPosition.y + 'px'}" class="feature-popup">
+        <div class="popup-content">
+          <!-- 关闭按钮 -->
+          <button @click="closePopup" class="close-btn">x</button>
+          <!-- 要素标题 -->
+          <h4>{{ selectedFeature.name || selectedFeature.land_type }}</h4>
+          <!-- 设施信息 -->
+          <div v-if="selectedFeature.layerType === 'facility'">
+            <p><strong>类型：</strong>{{ selectedFeature.type }}</p>
+            <p><strong>地址：</strong>{{ selectedFeature.address }}</p>
+            <p><strong>规模：</strong>{{ selectedFeature.capacity }}</p>
+            <p><strong>行政区：</strong>{{ selectedFeature.admin_region }}</p>
+          </div>
+          <!-- 土地利用信息 -->
+          <div v-else>
+            <p><strong>用地类型：</strong>{{ selectedFeature.type }}</p>
+            <p><strong>面积：</strong>{{ selectedFeature.area }}平方米</p>
+          </div>
         </div>
       </div>
     </div>
@@ -35,7 +85,7 @@ import { fromLonLat } from 'ol/proj';
 import XYZ from 'ol/source/XYZ';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { Style, Circle, Fill, Stroke } from 'ol/style';
+import { Style, Circle, Fill, Stroke, Text, Icon } from 'ol/style';
 import { Point, Polygon } from 'ol/geom';
 
 // 引入状态管理和工具模块
@@ -50,6 +100,15 @@ let map = null;
 // 图层定义
 const facilitiesLayer = ref(null);
 const landUseLayer = ref(null);
+
+// 公共设施和土地利用类型显示定义
+const selectedFacilityType = ref('all');
+const selectedLandUseType = ref('all');
+
+// 点击地图要素（用于弹窗显示）
+const selectedFeature = ref(null);
+// 弹窗位置
+const popupPosition = ref(null);
 
 // Pinia存储实例
 const mapDataStore = useMapDataStore();
@@ -94,101 +153,145 @@ function initializeMap(){
       zoom: 12
     })
   })
+
+  // 设置地图交互事件（点击设施弹窗）
+  setupMapInteractions();
 }
 
-// 创建获取设施函数
-async function loadFacilities(){
-  const bbox = getMapBbox(map);
-  await mapDataStore.loadFacilities(bbox);
+// --- 公共设施部分 ---
+// 添加filteredFacilities计算属性
+const filteredFacilities = computed(() => {
+  if(selectedFacilityType.value === 'all'){
+    return mapDataStore.facilities;
+  } else {
+    return mapDataStore.facilities.filter(facility => facility.type === selectedFacilityType.value);
+  }
+});
 
-  // 获取设施数据
-  // const facilities = mapDataStore.facilities;
-  // 换一种写法，能够保持facilities数据响应式
-  const { facilities } = storeToRefs(mapDataStore); 
-
+// 创建公共设施图层重新渲染函数
+function updateFacilityLayer(){
   // 创建矢量源
   const vectorSource = new VectorSource();
-
-  // 遍历设施数据，将每个设施点添加到矢量源
-  facilities.value.forEach(facility => {
+  // 遍历过滤后的公共设施数据
+  filteredFacilities.value.forEach(facility => {
     const coordinates = facility.geometry.coordinates;
     const point = new Point(fromLonLat(coordinates));
-
     const feature = new Feature({
       geometry: point,
       name: facility.name,
-      type: facility.type
+      type: facility.type,
+      address: facility.address,
+      capacity: facility.capacity,
+      admin_region: facility.admin_region,
+      layerType: 'facility'
     });
-
+    // 往矢量源中添加图形数据
     vectorSource.addFeature(feature);
-  });
+  })
 
-  // 如果已经存在设施图层，则先移除
-  if(facilitiesLayer.value) {
+  // 如果已有公共设施图层，先移除旧图层
+  if(facilitiesLayer.value){
     map.removeLayer(facilitiesLayer.value);
   }
 
-  // 创建新的矢量图层
+  // 创建公共设施新图层
   facilitiesLayer.value = new VectorLayer({
     source: vectorSource,
-    style: new Style({
-      image: new Circle({
-        radius: 6,
-        fill: new Fill({ color: 'red' }),
-        stroke: new Stroke({
-          color: 'white',
-          width: 1.5
-        })
-      })
-    })
+    style: createFacilityStyle
   });
 
-  // 将矢量图层添加到地图
+  // 添加公共设施图层到地图
   map.addLayer(facilitiesLayer.value);
 }
 
-// 创建获取土地利用数据函数
-async function loadLandUse() {
+// 创建加载公共设施函数
+async function loadFacilities(){
   const bbox = getMapBbox(map);
-  await mapDataStore.loadLandUse(bbox);
+  await mapDataStore.loadFacilities(bbox);
+  // 调用重新渲染函数
+  updateFacilityLayer();
+}
 
-  // 获取土地利用数据
-  const { landUse } = storeToRefs(mapDataStore);
-  const vectorSource = new VectorSource()
-  landUse.value.forEach(landUse => {
+// 创建公共设施样式函数
+function createFacilityStyle(feature){
+  const type = feature.get('type');  // 此处的feature在其它函数调用时生效
+  // 输出样式
+  return new Style({
+    text: new Text({
+      text: getFacilityIcon(type),  // 调用公共设施emoji图标样式函数
+      font: 'bold 18px Arial'
+    })
+  });
+}
+
+// 创建公共设施emoji图标样式函数
+function getFacilityIcon(type){
+  const icons = {
+    school: '🎓',
+    hospital: '🏥',
+    library: '📖',
+    stadium: '🏀',
+    park: '🌳'
+  };
+  return icons[type] || '📍';
+}
+
+// --- 土地利用部分 ---
+// 添加filteredLandUse计算属性
+const filteredLandUse = computed(() => {
+  if(selectedLandUseType.value === 'all'){
+    return mapDataStore.landUse;
+  } else {
+    return mapDataStore.landUse.filter(landUse => landUse.type === selectedLandUseType.value)
+  }
+})
+
+// 创建土地利用图层重新渲染函数
+function updateLandUseLayer() {
+  // 创建矢量源
+  const vectorSource = new VectorSource();
+  // 遍历过滤后的土地利用数据
+  filteredLandUse.value.forEach(landUse => {
     const coordinates = landUse.geometry.coordinates;
     const polygon = new Polygon(coordinates).transform('EPSG:4326', 'EPSG:3857');
-
     const feature = new Feature({
       geometry: polygon,
       name: landUse.name,
       type: landUse.type,
-      area: landUse.area
+      area: landUse.area,
+      layerType: 'landUse'
     });
-
+    // 往矢量源中添加图形数据
     vectorSource.addFeature(feature);
-  });
+  })
 
-  // 如果存在土地利用图层，先移除
-  if (landUseLayer.value) {
+  // 如果已有土地利用图层，先移除旧图层
+  if(landUseLayer.value){
     map.removeLayer(landUseLayer.value)
   };
 
-  // 创建土地利用图层
+  // 创建土地利用新图层
   landUseLayer.value = new VectorLayer({
     source: vectorSource,
     style: createLandUseStyle
   });
 
-  // 将矢量图层添加到地图
+  // 添加土地图层到地图
   map.addLayer(landUseLayer.value);
+}
+
+// 创建加载土地利用数据函数
+async function loadLandUse() {
+  const bbox = getMapBbox(map);
+  await mapDataStore.loadLandUse(bbox);
+  // 调用重新渲染函数
+  updateLandUseLayer();
 }
 
 // 创建土地利用样式函数
 function createLandUseStyle(feature) {
   const type = feature.get('type');
   let color = 'rgba(0, 0, 0, 0.6)';
-
   // 根据土地利用类型设置不同颜色
   switch(type){
     case 'residential':
@@ -215,7 +318,44 @@ function createLandUseStyle(feature) {
     })
   });
 }
+
+
+// 创建地图交互处理函数(要素弹窗)
+function setupMapInteractions() {
+  map.on('click', (event) => {
+    // 定义要素为空
+    const features = map.getFeaturesAtPixel(event.pixel);
+
+    if(features.length > 0) {
+      selectedFeature.value = features[0].getProperties();
+      // 设置弹窗位置为点击位置
+      popupPosition.value = {
+        x: event.pixel[0] + 20,
+        y: event.pixel[1]
+      };
+    } else {
+      closePopup();
+    }
+  });
+
+  // 指针接近设施要素时改变鼠标样式
+  map.on('pointermove', (event) => {
+    // 定义鼠标位置是否有要素
+    const hit = map.hasFeatureAtPixel(event.pixel);
+
+    // 如果有要素，显示手型光标，否则显示默认指针
+    map.getTargetElement().style.cursor = hit ? 'pointer' : '';
+  });
+}
+
+
+// 关闭要素弹窗
+function closePopup() {
+  selectedFeature.value = null;
+  popupPosition.value = null;
+}
 </script>
+
 
 <style scoped>
 .map-wrapper {
@@ -246,7 +386,6 @@ function createLandUseStyle(feature) {
   left: 140px;
   top: 5px;
   line-height: 35px;
-
   padding: 0 10px;
   background-color: #ccc;
   border-radius: 6px;
@@ -259,8 +398,36 @@ function createLandUseStyle(feature) {
 
 .control-item button {
   display: inline-block;
+  height: 28px;
   font-size: 16px;
   margin: 0 5px;
+  padding: 0 5px;
+}
+
+.control-type {
+  position: absolute;
+  left: 450px;
+  top: 5px;
+  line-height: 35px;
+  padding: 0 10px;
+  background-color: #ccc;
+  border-radius: 6px;
+}
+
+.control-type h4 {
+  display:inline-block;
+  font-size: 16px;
+}
+
+.control-type div {
+  display: inline-block;
+  font-size: 16px;
+  padding: 0 5px;
+}
+
+.control-type div select {
+  height: 28px;
+  font-size: 16px;
   padding: 0 5px;
 }
 
@@ -300,5 +467,50 @@ function createLandUseStyle(feature) {
 
 .status-info div {
   color: #52c41a;
+}
+
+/* 要素信息弹窗样式 */
+.feature-popup {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 5px 30px 5px 5px;
+  border-radius: 5px;
+}
+
+.popup-content{
+  position: relative;
+  padding: 0 5px;
+}
+
+.close-btn {
+  position: absolute;
+  right: -25px;
+  border-radius: 50%;
+  border: none;
+  width: 20px;
+  height: 20px;
+  line-height: 1;
+  text-align: center;
+  font-size: 14px;
+  color: #000;
+}
+
+.close-btn:hover {
+  background: #ccc;
+}
+
+/* 弹窗标题 */
+.popup-content h4 {
+  margin-bottom: 5px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid #aaa;
+  font-size: 16px;
+  color: #eee;
+}
+
+/* 弹窗内容 */
+.popup-content p {
+  font-size: 14px;
+  color: #eee;
 }
 </style>

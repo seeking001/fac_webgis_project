@@ -25,7 +25,5 @@ export const useMapDataStore = defineStore('mapData', () => {
     landUse.value = response.data;
   }
 
-  // 
-
   return { facilities, loadFacilities, landUse, loadLandUse };
 })
