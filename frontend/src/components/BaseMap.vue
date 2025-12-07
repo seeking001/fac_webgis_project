@@ -14,8 +14,8 @@
       <div class="control-type">
         <h4>显示类型：</h4>
         <div>
-          公共设施
-          <select v-model="selectedFacilityType" @change="updateFacilityLayer">
+          <label><input type="checkbox" v-model="facilityChecked">公共设施</label>
+          <select v-model="selectedFacilityType" @change="updateFacilityLayer" :disabled="!facilityChecked">
             <option value="all">全部类型</option>
             <option value="school">学校</option>
             <option value="hospital">医院</option>
@@ -25,8 +25,8 @@
           </select>
         </div>
         <div>
-          土地利用
-          <select v-model="selectedLandUseType" @change="updateLandUseLayer">
+          <label><input type="checkbox" v-model="landUseChecked">土地利用</label>
+          <select v-model="selectedLandUseType" @change="updateLandUseLayer" :disabled="!landUseChecked">
             <option value="all">全部类型</option>
             <option value="commercial">商业用地</option>
             <option value="residential">居住用地</option>
@@ -40,6 +40,11 @@
     <div class="map-content">
       <!-- 地图容器 -->
       <div ref="mapContainer" class="map-container"></div>
+
+      <!-- 地图控件容器 -->
+      <div ref="mousePosition" class="mouse-position"></div>
+      <div ref="overviewMap" class="overview-map"></div>
+      <div ref="scaleLine" class="scale-line"></div>
 
       <!-- 状态信息显示区域 -->
       <div class="sidebar">
@@ -76,32 +81,39 @@
 
 <script setup>
 // 引入vue组件
-import { onMounted, onUnmounted, ref, computed } from 'vue';
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 // 引入openlayers组件
 import { Map, View } from 'ol';
 import TileLayer from 'ol/layer/Tile';
-import Feature from 'ol/Feature.js';
+import Feature from 'ol/Feature';
 import { fromLonLat } from 'ol/proj';
 import XYZ from 'ol/source/XYZ';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { Style, Circle, Fill, Stroke, Text, Icon } from 'ol/style';
+import { Style, Fill, Stroke, Text } from 'ol/style';
 import { Point, Polygon } from 'ol/geom';
+import { FullScreen, OverviewMap, ScaleLine, MousePosition,ZoomSlider, ZoomToExtent, defaults } from "ol/control";
+import { createStringXY } from "ol/coordinate";
 
 // 引入状态管理和工具模块
 import { useMapDataStore } from '../stores/mapData'
 import { getMapBbox } from '../utils/mapHelpers';
-import { storeToRefs } from 'pinia';
 
 // 地图容器和地图实例
 const mapContainer = ref(null);
 let map = null;
+
+// 定义地图控件
+const mousePosition = ref(null);
+const scaleLine = ref(null);
 
 // 图层定义
 const facilitiesLayer = ref(null);
 const landUseLayer = ref(null);
 
 // 公共设施和土地利用类型显示定义
+const facilityChecked = ref(true);
+const landUseChecked = ref(true);
 const selectedFacilityType = ref('all');
 const selectedLandUseType = ref('all');
 
@@ -132,26 +144,52 @@ onUnmounted(() => {
 
 // 创建初始化地图
 function initializeMap(){
+  // 定义和配置地图控件
+  // 1. 鼠标位置显示坐标
+  const mousePositionControl = new MousePosition({
+    coordinateFormat: createStringXY(4),
+    projection: 'EPSG:4326',
+    className: 'custom-mouse-position',
+    target: mousePosition.value
+  });
+  // 2. 比例尺
+  const scaleLineControl = new ScaleLine({
+    target: scaleLine.value
+  });
+
+  // 配置地图
   map = new Map({
     target: mapContainer.value,
     layers: [
       new TileLayer({
         source: new XYZ({
           url: 'http://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
-          warpX: false
+          wrapX: false
         })
       }),
-      new TileLayer({
-        source: new XYZ({
-          url: 'http://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
-          warpX: false
-        })
-      }),
+      // new TileLayer({
+      //   source: new XYZ({
+      //     url: 'http://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
+      //     wrapX: false
+      //   })
+      // }),
     ],
+
+    // 地图视图
     view: new View({
       center: fromLonLat([114.00, 22.55]),
       zoom: 12
-    })
+    }),
+
+    // 添加地图控件
+    controls: defaults().extend([
+      // 全屏控件
+      new FullScreen(),
+      // 鼠标坐标控件
+      mousePositionControl,
+      // 比例尺控件
+      scaleLineControl
+    ])
   })
 
   // 设置地图交互事件（点击设施弹窗）
@@ -197,12 +235,26 @@ function updateFacilityLayer(){
   // 创建公共设施新图层
   facilitiesLayer.value = new VectorLayer({
     source: vectorSource,
-    style: createFacilityStyle
+    style: createFacilityStyle,
+    visible: facilityChecked.value
   });
 
   // 添加公共设施图层到地图
   map.addLayer(facilitiesLayer.value);
 }
+
+// 监听公共设施和土地利用复选框变化
+watch([facilityChecked, landUseChecked], () => {
+  // 控制公共设施图层
+  if(facilitiesLayer.value){
+    facilitiesLayer.value.setVisible(facilityChecked.value);
+  }
+
+  // 控制土地利用图层
+  if(landUseLayer.value){
+    landUseLayer.value.setVisible(landUseChecked.value);
+  }
+})
 
 // 创建加载公共设施函数
 async function loadFacilities(){
@@ -273,7 +325,8 @@ function updateLandUseLayer() {
   // 创建土地利用新图层
   landUseLayer.value = new VectorLayer({
     source: vectorSource,
-    style: createLandUseStyle
+    style: createLandUseStyle,
+    visible: landUseChecked.value
   });
 
   // 添加土地图层到地图
@@ -348,7 +401,6 @@ function setupMapInteractions() {
   });
 }
 
-
 // 关闭要素弹窗
 function closePopup() {
   selectedFeature.value = null;
@@ -357,17 +409,48 @@ function closePopup() {
 </script>
 
 
-<style scoped>
+<style>
 .map-wrapper {
   width: 100vw;
   overflow: hidden;
+}
+
+.ol-full-screen {
+  position: absolute;
+  top: 0;
+  right: 3px;
+}
+
+.mouse-position {
+  position: absolute;
+  bottom: 3px;
+  right: 285px;
+  padding: 0 10px;
+  color: #999;
+}
+
+.overviewmap {
+  position: absolute;
+  bottom: 100px;
+  width: 150px;
+  height: 150px;
+  background: skyblue;
+}
+
+.scale-line {
+  position:absolute;
+  left: 3px;
+  bottom: 3px;
+  color: #666;
+  text-align: center;
+  padding: 0 10px;
+  border-bottom: 1px solid #666;
 }
 
 .map-controls {
   position: relative;
   width: 100vw;
   height: 45px;
-  /* line-height: 45px; */
   background-color: rgba(100, 30, 155, 0.8);
 }
 
@@ -381,7 +464,6 @@ function closePopup() {
 }
 
 .control-item {
-  /* display: inline-block; */
   position: absolute;
   left: 140px;
   top: 5px;
