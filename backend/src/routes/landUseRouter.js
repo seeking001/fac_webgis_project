@@ -5,8 +5,11 @@ const LandUseController = require('../controllers/landUseController');
 // 创建路由实例
 const router = express.Router();
 
-// 获取公共服务设施API
+// 获取土地利用数据API
 router.get('/', LandUseController.getLandUse);
+
+// 添加土地利用数据API
+router.post('/', LandUseController.createLandUse);
 
 // 导出路由实例，供app.js使用
 module.exports = router;

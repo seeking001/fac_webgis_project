@@ -50,3 +50,13 @@ export async function getLandUse(bbox = null) {
   }
   return request(url);
 }
+
+// 创建土地利用数据
+export async function createLandUse(landUseData) {
+  const url = '/landUse';
+
+  return request(url, {
+    method: 'POST',
+    body: JSON.stringify(landUseData)
+  });
+}

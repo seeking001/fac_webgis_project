@@ -35,6 +35,12 @@
           </select>
         </div>
       </div>
+
+      <!-- 绘制图形 -->
+      <div class="control-draw">
+        <h4>绘制添加：</h4>
+        <button @click="vectorDraw">土地利用</button>
+      </div>
     </div>
 
     <div class="map-content">
@@ -75,6 +81,62 @@
           </div>
         </div>
       </div>
+
+      <!-- 添加数据属性表单弹窗 -->
+      <div v-if="showLandUseForm" class="landuse-form">
+        <div class="form-overlay" @click="cancelDraw"></div>
+        <div class="form-content">
+          <h4>添加土地利用</h4>
+          <form @submit.prevent="saveToDatabase">
+            <div class="form-group">
+              <label>名称：</label>
+              <input
+                v-model="landUseForm.name"
+                type="text"
+                placeholder="例如：福田居住区"
+                required
+              >
+            </div>
+
+            <div class="form-group">
+              <label>用地类型：</label>
+              <select v-model="landUseForm.type" required>
+                <option value="">请选择类型</option>
+                <option value="商业用地">商业用地</option>
+                <option value="居住用地">居住用地</option>
+                <option value="工业用地">工业用地</option>
+                <option value="公园绿地">公园绿地</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>行政区：</label>
+              <select v-model="landUseForm.admin_region" required>
+                <option value="">请选择类型</option>
+                <option value="福田区">福田区</option>
+                <option value="南山区">南山区</option>
+                <option value="罗湖区">罗湖区</option>
+                <option value="宝安区">宝安区</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>面积（平方米）：</label>
+              <input
+                v-model="landUseForm.area"
+                type="number"
+                placeholder="手动输入"
+                required
+              >
+            </div>
+
+            <div class="form-buttons">
+              <button type="button" @click="cancelDraw" class="btn-cancel">取消</button>
+              <button type="submit" class="btn-save">保存</button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -86,7 +148,7 @@ import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { Map, View } from 'ol';
 import TileLayer from 'ol/layer/Tile';
 import Feature from 'ol/Feature';
-import { fromLonLat } from 'ol/proj';
+import { fromLonLat, toLonLat } from 'ol/proj';
 import XYZ from 'ol/source/XYZ';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
@@ -94,10 +156,14 @@ import { Style, Fill, Stroke, Text } from 'ol/style';
 import { Point, Polygon } from 'ol/geom';
 import { FullScreen, OverviewMap, ScaleLine, MousePosition,ZoomSlider, ZoomToExtent, defaults } from "ol/control";
 import { createStringXY } from "ol/coordinate";
+import Draw from 'ol/interaction/Draw';
 
 // 引入状态管理和工具模块
 import { useMapDataStore } from '../stores/mapData'
 import { getMapBbox } from '../utils/mapHelpers';
+
+// 引入api组件
+import { getFacilities, getLandUse, createLandUse } from '../services/api';
 
 // 地图容器和地图实例
 const mapContainer = ref(null);
@@ -121,6 +187,19 @@ const selectedLandUseType = ref('all');
 const selectedFeature = ref(null);
 // 弹窗位置
 const popupPosition = ref(null);
+
+// 输入矢量要素（用于弹窗显示）
+const showLandUseForm = ref(false);
+const isDrawing = ref(false);
+const landUseForm = ref({
+  name: '',
+  type: '',
+  admin_region: '',
+  area: null
+});
+let drawFeature = null;
+let drawInteraction = null;
+let drawLayer = null;
 
 // Pinia存储实例
 const mapDataStore = useMapDataStore();
@@ -279,11 +358,11 @@ function createFacilityStyle(feature){
 // 创建公共设施emoji图标样式函数
 function getFacilityIcon(type){
   const icons = {
-    school: '🎓',
-    hospital: '🏥',
-    library: '📖',
-    stadium: '🏀',
-    park: '🌳'
+    学校: '🎓',
+    医院: '🏥',
+    图书馆: '📖',
+    体育馆: '🏀',
+    公园: '🌳'
   };
   return icons[type] || '📍';
 }
@@ -347,16 +426,16 @@ function createLandUseStyle(feature) {
   let color = 'rgba(0, 0, 0, 0.6)';
   // 根据土地利用类型设置不同颜色
   switch(type){
-    case 'residential':
+    case '居住用地':
       color = 'rgba(255, 255, 45, 0.6)';
       break;
-    case 'commercial':
+    case '商业用地':
       color = 'rgba(255, 0, 0, 0.6)';
       break;
-    case 'industrial':
+    case '工业用地':
       color = 'rgba(187, 150, 116, 0.6)';
       break;
-    case 'green_space':
+    case '公园绿地':
       color = 'rgba(0, 255, 0, 0.6)';
       break;
   }
@@ -376,6 +455,11 @@ function createLandUseStyle(feature) {
 // 创建地图交互处理函数(要素弹窗)
 function setupMapInteractions() {
   map.on('click', (event) => {
+    // 如果正在绘图模式，不触发弹窗
+    if(showLandUseForm.value || isDrawing.value) {
+      return;
+    }
+
     // 定义要素为空
     const features = map.getFeaturesAtPixel(event.pixel);
 
@@ -405,6 +489,136 @@ function setupMapInteractions() {
 function closePopup() {
   selectedFeature.value = null;
   popupPosition.value = null;
+}
+
+
+// 创建绘图功能
+function vectorDraw(){
+  // 先清除之前的绘图交互
+  if (drawInteraction) {
+    map.removeInteraction(drawInteraction);
+  }
+
+  // 临时禁用点击弹窗事件
+  isDrawing.value = true;
+
+  // 创建临时图层
+  const source = new VectorSource();
+  drawLayer = new VectorLayer({
+    source,
+    style: new Style({
+      fill: new Fill({
+        color: 'rgba(255, 0, 0, 0.5)'
+      }),
+      stroke: new Stroke({
+        color: 'red',
+        width: 1.5
+      })
+    })
+  });
+  map.addLayer(drawLayer);
+  // 创建绘图交互
+  drawInteraction = new Draw({
+    source,
+    type: 'Polygon',
+    style: new Style({
+      fill: new Fill({
+        color: 'rgba(255, 0, 0, 0.5)'
+      }),
+      stroke: new Stroke({
+        color: 'red',
+        width: 1.5
+      })
+    })
+  });
+
+  // 监听绘图完成事件
+  drawInteraction.on('drawend', (event) => {
+    drawFeature = event.feature;
+    // 显示表单
+    showLandUseForm.value = true;
+  });
+
+  // 添加绘图交互
+  map.addInteraction(drawInteraction);
+}
+
+// 提交保存到数据库的函数
+async function saveToDatabase() {
+  try {
+    // 1. 检查必要数据
+    if (!landUseForm.value.name || !drawFeature) {
+      alert('请填写地块名称');
+      return;
+    }
+    
+    // 2. 准备几何数据
+    const geometry = drawFeature.getGeometry();
+    const coordinates = geometry.getCoordinates();
+    
+    // 3. 转换为WGS84坐标（因为数据库用的是4326坐标系）
+    const wgs84Coordinates = coordinates.map(ring => 
+      ring.map(coord => toLonLat(coord))
+    );
+    
+    // 4. 创建GeoJSON格式
+    const geoJsonGeometry = {
+      type: 'Polygon',
+      coordinates: wgs84Coordinates
+    };
+    
+    // 5. 准备发送的数据
+    const landUseData = {
+      name: landUseForm.value.name,
+      type: landUseForm.value.type,
+      geometry: geoJsonGeometry,
+      area: landUseForm.value.area || 0,  // 使用表单中的面积，如果没有则设为0
+      admin_region: landUseForm.value.admin_region || '福田区'  // 先写固定值
+    };
+    
+    console.log('准备保存的数据:', landUseData);
+    
+    // 6. 调用API保存到数据库
+    const response = await createLandUse(landUseData);
+    
+    if (response.success) {
+      alert('保存成功！');
+      // 重新加载土地利用数据
+      await loadLandUse();
+      // 重置状态
+      cancelDraw();
+    } else {
+      alert('保存失败: ' + response.message);
+    }
+    
+  } catch (error) {
+    console.error('保存失败:', error);
+    alert('保存失败，请检查控制台');
+  }
+}
+
+// 取消绘制函数
+function cancelDraw() {
+  // 重置状态
+  showLandUseForm.value = false;
+  landUseForm.value = { 
+    name: '', 
+    type: '', 
+    admin_region: '', 
+    area: null 
+  };
+  drawFeature = null;
+  isDrawing.value = false;
+  
+  // 移除绘图交互
+  if (drawInteraction) {
+    map.removeInteraction(drawInteraction);
+    drawInteraction = null;
+  }
+  if (drawLayer) {
+    map.removeLayer(drawLayer);
+    drawLayer = null;
+  }
 }
 </script>
 
@@ -513,6 +727,29 @@ function closePopup() {
   padding: 0 5px;
 }
 
+.control-draw {
+  position: absolute;
+  left: 950px;
+  top: 5px;
+  line-height: 35px;
+  padding: 0 10px;
+  background-color: #ccc;
+  border-radius: 6px;
+}
+
+.control-draw h4 {
+  display:inline-block;
+  font-size: 16px;
+}
+
+.control-draw button {
+  display: inline-block;
+  height: 28px;
+  font-size: 16px;
+  margin: 0 5px;
+  padding: 0 5px;
+}
+
 .map-content {
   position:relative;
   width: 100vw;
@@ -594,5 +831,82 @@ function closePopup() {
 .popup-content p {
   font-size: 14px;
   color: #eee;
+}
+
+.landuse-form {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.form-overlay {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.form-content {
+  position: relative;
+  background: white;
+  padding: 20px;
+  border-radius: 5px;
+  width: 300px;
+  z-index: 1001;
+}
+
+.form-content h4 {
+  margin: 0 0 15px 0;
+  text-align: center;
+  color: #333;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  color: #666;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+}
+
+.form-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn-cancel,
+.btn-save {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.btn-cancel {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.btn-save {
+  background: #409eff;
+  color: white;
 }
 </style>

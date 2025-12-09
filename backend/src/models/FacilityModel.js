@@ -23,7 +23,7 @@ class FacilityModel {
     // 如果提供了边界框,添加空间过滤条件
     if (bbox && bbox.length === 4) {
       // 创建矩形边界框
-      query += ` WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4490)`;
+      query += ` WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)`;
       params.push(...bbox); // 展开bbox数组到参数中
     }
 

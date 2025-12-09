@@ -22,7 +22,7 @@ class LandUseModel {
     // 根据视图框添加空间过滤条件
     if (bbox && bbox.length === 4) {
       // 创建视图框
-      query += ` WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4490)`;
+      query += ` WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)`;
       params.push(...bbox);  // 展开bbox数组到参数中
     }
 
@@ -33,6 +33,33 @@ class LandUseModel {
       ...row,  // 展开所有非几何字段
       geometry: JSON.parse(row.geometry)  // 解析GeoJSON几何数据
     }));
+  }
+
+  // 添加土地利用数据
+  // 添加土地利用数据
+  static async createLandUse(data) {
+    const { name, type, area, admin_region, geometry } = data;
+
+    const query = `
+    INSERT INTO land_use (name, type, area, admin_region, geom)
+    VALUES ($1, $2, $3, $4, ST_SetSRID(ST_GeomFromGeoJSON($5), 4326))
+    RETURNING id, name, type, area, admin_region, ST_AsGeoJSON(geom) as geometry, created_at
+  `;
+
+    const params = [name, type, area || 0, admin_region || '未知区域', JSON.stringify(geometry)];
+
+    try {
+      const result = await pool.query(query, params);
+      const row = result.rows[0];
+
+      return {
+        ...row,
+        geometry: JSON.parse(row.geometry)
+      };
+    } catch (error) {
+      console.error('插入土地利用数据失败:', error);
+      throw error;
+    }
   }
 }
 
