@@ -66,7 +66,7 @@
           <!-- 关闭按钮 -->
           <button @click="closePopup" class="close-btn">x</button>
           <!-- 要素标题 -->
-          <h4>{{ selectedFeature.name || selectedFeature.land_type }}</h4>
+          <h4>{{ selectedFeature.name }}</h4>
           <!-- 设施信息 -->
           <div v-if="selectedFeature.layerType === 'facility'">
             <p><strong>类型：</strong>{{ selectedFeature.type }}</p>
@@ -77,7 +77,8 @@
           <!-- 土地利用信息 -->
           <div v-else>
             <p><strong>用地类型：</strong>{{ selectedFeature.type }}</p>
-            <p><strong>面积：</strong>{{ selectedFeature.area }}平方米</p>
+            <p><strong>用地面积：</strong>{{ selectedFeature.area }}平方米</p>
+            <p><strong>行政区：</strong>{{ selectedFeature.admin_region }}</p>
           </div>
         </div>
       </div>
@@ -390,6 +391,7 @@ function updateLandUseLayer() {
       name: landUse.name,
       type: landUse.type,
       area: landUse.area,
+      admin_region: landUse.admin_region,
       layerType: 'landUse'
     });
     // 往矢量源中添加图形数据
