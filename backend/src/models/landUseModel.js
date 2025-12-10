@@ -41,10 +41,10 @@ class LandUseModel {
     const { name, type, area, admin_region, geometry } = data;
 
     const query = `
-    INSERT INTO land_use (name, type, area, admin_region, geom)
-    VALUES ($1, $2, $3, $4, ST_SetSRID(ST_GeomFromGeoJSON($5), 4326))
-    RETURNING id, name, type, area, admin_region, ST_AsGeoJSON(geom) as geometry, created_at
-  `;
+      INSERT INTO land_use (name, type, area, admin_region, geom)
+      VALUES ($1, $2, $3, $4, ST_SetSRID(ST_GeomFromGeoJSON($5), 4326))
+      RETURNING id, name, type, area, admin_region, ST_AsGeoJSON(geom) as geometry, created_at
+    `;
 
     const params = [name, type, area || 0, admin_region || '未知区域', JSON.stringify(geometry)];
 
@@ -58,6 +58,41 @@ class LandUseModel {
       };
     } catch (error) {
       console.error('插入土地利用数据失败:', error);
+      throw error;
+    }
+  }
+
+  // 更新土地利用数据
+  static async updateLandUse(id, data) {
+    const { name, type, area, admin_region, geometry } = data;
+
+    const query = `
+      UPDATE land_use
+      SET
+        name = $1,
+        type = $2,
+        area = $3,
+        admin_region = $4,
+        geom = ST_SetSRID(ST_GeomFromGeoJSON($5), 4326)
+      WHERE id = $6
+      RETURNING id, name, type, area, admin_region, ST_AsGeoJSON(geom) as geometry, created_at
+    `;
+
+    const params = [name, type, area || 0, admin_region || '未知区域', JSON.stringify(geometry), id];
+
+    try {
+      const result = await pool.query(query, params);
+      if (result.rows.length === 0) {
+        throw new Error('土地利用数据未找到');
+      }
+      const row = result.rows[0];
+
+      return {
+        ...row,
+        geometry: JSON.parse(row.geometry)
+      };
+    } catch (error) {
+      console.error('更新土地利用数据失败:', error);
       throw error;
     }
   }

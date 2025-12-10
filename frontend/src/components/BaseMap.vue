@@ -157,14 +157,14 @@ import { Style, Fill, Stroke, Text } from 'ol/style';
 import { Point, Polygon } from 'ol/geom';
 import { FullScreen, OverviewMap, ScaleLine, MousePosition,ZoomSlider, ZoomToExtent, defaults } from "ol/control";
 import { createStringXY } from "ol/coordinate";
-import Draw from 'ol/interaction/Draw';
+import { Draw, Modify } from 'ol/interaction';
 
 // 引入状态管理和工具模块
 import { useMapDataStore } from '../stores/mapData'
 import { getMapBbox } from '../utils/mapHelpers';
 
 // 引入api组件
-import { getFacilities, getLandUse, createLandUse } from '../services/api';
+import { getFacilities, getLandUse, createLandUse, updateLandUse } from '../services/api';
 
 // 地图容器和地图实例
 const mapContainer = ref(null);
@@ -201,6 +201,8 @@ const landUseForm = ref({
 let drawFeature = null;
 let drawInteraction = null;
 let drawLayer = null;
+// 土地利用图层的修改交互
+let landUseModify = null;
 
 // Pinia存储实例
 const mapDataStore = useMapDataStore();
@@ -388,6 +390,7 @@ function updateLandUseLayer() {
     const polygon = new Polygon(coordinates).transform('EPSG:4326', 'EPSG:3857');
     const feature = new Feature({
       geometry: polygon,
+      id: landUse.id,
       name: landUse.name,
       type: landUse.type,
       area: landUse.area,
@@ -412,6 +415,58 @@ function updateLandUseLayer() {
 
   // 添加土地图层到地图
   map.addLayer(landUseLayer.value);
+
+  // 添加修改交互：让所有土地利用地块都可以编辑
+  if(landUseModify){
+    map.removeInteraction(landUseModify);
+  }
+
+  landUseModify = new Modify({
+    source: vectorSource
+  });
+
+  // 添加要素修改监听
+  landUseModify.on('modifyend', async (event) => {
+    const features = event.features.getArray();
+    // 假设一次只修改一个要素
+    const feature = features[0];
+    const id = feature.get('id');
+    const name = feature.get('name');
+    const type = feature.get('type');
+    const area = feature.get('area');
+    const admin_region = feature.get('admin_region');
+    
+    // 获取几何数据并转换为GeoJSON
+    const geometry = feature.getGeometry();
+    const coordinates = geometry.getCoordinates();
+    const geoJsonGeometry = {
+      type: 'Polygon',
+      coordinates: coordinates.map(ring => 
+        ring.map(coord => toLonLat(coord))
+      )
+    };
+
+    const landUseData = {
+      name,
+      type,
+      area,
+      admin_region,
+      geometry: geoJsonGeometry
+    };
+
+    try {
+      const response = await updateLandUse(id, landUseData);
+      if (response.success) {
+        console.log('更新成功');
+      } else {
+        console.error('更新失败:', response.message);
+      }
+    } catch (error) {
+      console.error('更新请求失败:', error);
+    }
+  });
+
+  map.addInteraction(landUseModify);
 }
 
 // 创建加载土地利用数据函数

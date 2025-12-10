@@ -60,3 +60,13 @@ export async function createLandUse(landUseData) {
     body: JSON.stringify(landUseData)
   });
 }
+
+// 更新土地利用数据
+export async function updateLandUse(id, landUseData) {
+  const url = `/landUse/${id}`;
+
+  return request(url, {
+    method: 'PUT',
+    body: JSON.stringify(landUseData)
+  });
+}

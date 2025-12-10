@@ -69,6 +69,44 @@ class LandUseController {
       });
     }
   }
+
+  // 更新土地利用数据
+  static async updateLandUse(req, res) {
+    try {
+      const { id } = req.params;
+      const { name, type, area, admin_region, geometry } = req.body;
+
+      // 验证必要字段
+      if (!id || !name || !type || !geometry) {
+        return res.status(400).json({
+          success: false,
+          message: '缺少必要字段: id, name, type, geometry'
+        });
+      }
+
+      // 调用模型层更新数据
+      const updatedLandUse = await LandUseModel.updateLandUse(id, {
+        name,
+        type,
+        area: area || 0,
+        admin_region: admin_region || '未知区域',
+        geometry
+      });
+
+      // 返回成功响应
+      res.json({
+        success: true,
+        message: '土地利用数据更新成功',
+        data: updatedLandUse
+      });
+    } catch (error) {
+      console.error('更新土地利用数据失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '更新土地利用数据失败'
+      });
+    }
+  }
 }
 
 // 导出土地利用数据控制类，供路由模块使用
