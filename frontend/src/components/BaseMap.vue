@@ -17,21 +17,21 @@
           <label><input type="checkbox" v-model="facilityChecked">公共设施</label>
           <select v-model="selectedFacilityType" @change="updateFacilityLayer" :disabled="!facilityChecked">
             <option value="all">全部类型</option>
-            <option value="school">学校</option>
-            <option value="hospital">医院</option>
-            <option value="library">图书馆</option>
-            <option value="stadium">体育馆</option>
-            <option value="park">公园</option>
+            <option value="学校">学校</option>
+            <option value="医院">医院</option>
+            <option value="图书馆">图书馆</option>
+            <option value="体育馆">体育馆</option>
+            <option value="公园">公园</option>
           </select>
         </div>
         <div>
           <label><input type="checkbox" v-model="landUseChecked">土地利用</label>
           <select v-model="selectedLandUseType" @change="updateLandUseLayer" :disabled="!landUseChecked">
             <option value="all">全部类型</option>
-            <option value="commercial">商业用地</option>
-            <option value="residential">居住用地</option>
-            <option value="industrial">工业用地</option>
-            <option value="green_space">公园绿地</option>
+            <option value="商业用地">商业用地</option>
+            <option value="居住用地">居住用地</option>
+            <option value="工业用地">工业用地</option>
+            <option value="公园绿地">公园绿地</option>
           </select>
         </div>
       </div>
