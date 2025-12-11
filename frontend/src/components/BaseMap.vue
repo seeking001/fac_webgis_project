@@ -41,6 +41,12 @@
         <h4>绘制添加：</h4>
         <button @click="vectorDraw">土地利用</button>
       </div>
+
+      <!-- 编辑图形 -->
+       <div class="control-modify">
+        <h4>编辑图形：</h4>
+        <button @click="">土地利用</button>
+       </div>
     </div>
 
     <div class="map-content">
@@ -155,7 +161,7 @@ import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import { Style, Fill, Stroke, Text } from 'ol/style';
 import { Point, Polygon } from 'ol/geom';
-import { FullScreen, OverviewMap, ScaleLine, MousePosition,ZoomSlider, ZoomToExtent, defaults } from "ol/control";
+import { FullScreen, ScaleLine, MousePosition, defaults } from "ol/control";
 import { createStringXY } from "ol/coordinate";
 import { Draw, Modify } from 'ol/interaction';
 
@@ -164,7 +170,7 @@ import { useMapDataStore } from '../stores/mapData'
 import { getMapBbox } from '../utils/mapHelpers';
 
 // 引入api组件
-import { getFacilities, getLandUse, createLandUse, updateLandUse } from '../services/api';
+import { createLandUse, updateLandUse } from '../services/api';
 
 // 地图容器和地图实例
 const mapContainer = ref(null);
@@ -759,7 +765,7 @@ function cancelDraw() {
 
 .control-type {
   position: absolute;
-  left: 450px;
+  left: 430px;
   top: 5px;
   line-height: 35px;
   padding: 0 10px;
@@ -786,7 +792,7 @@ function cancelDraw() {
 
 .control-draw {
   position: absolute;
-  left: 950px;
+  left: 910px;
   top: 5px;
   line-height: 35px;
   padding: 0 10px;
@@ -800,6 +806,29 @@ function cancelDraw() {
 }
 
 .control-draw button {
+  display: inline-block;
+  height: 28px;
+  font-size: 16px;
+  margin: 0 5px;
+  padding: 0 5px;
+}
+
+.control-modify {
+  position: absolute;
+  left: 1112px;
+  top: 5px;
+  line-height: 35px;
+  padding: 0 10px;
+  background-color: #ccc;
+  border-radius: 6px;
+}
+
+.control-modify h4 {
+  display:inline-block;
+  font-size: 16px;
+}
+
+.control-modify button {
   display: inline-block;
   height: 28px;
   font-size: 16px;
