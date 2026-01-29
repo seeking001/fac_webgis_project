@@ -5,10 +5,10 @@ require('dotenv').config();
 // 创建数据库连接池
 const pool = new Pool({
   host: process.env.DB_HOST,  // 数据库服务器地址
-  port: process.env.DB_PORT, //数据库端口
-  database: process.env.DB_NAME, //数据库名称
-  user: process.env.DB_USER, //用户名
-  password: process.env.DB_PASSWORD, //密码
+  port: process.env.DB_PORT,  //数据库端口
+  database: process.env.DB_NAME,  //数据库名称
+  user: process.env.DB_USER,  //用户名
+  password: process.env.DB_PASSWORD,  //密码
   ssl: process.env.DB_SSL === 'true'  // 是否使用SSL加密连接
 });
 

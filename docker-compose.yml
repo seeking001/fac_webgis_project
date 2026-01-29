@@ -1,66 +1,67 @@
 services:
   postgres:
     image: postgis/postgis:15-3.3
-    container_name: practice_postgres
+    container_name: planning_postgres
     environment:
-      POSTGRES_DB: practice_gis
-      POSTGRES_USER: seeking001
-      POSTGRES_PASSWORD: Snpg7814
+      POSTGRES_DB: planning_db
+      POSTGRES_USER: planning_admin
+      POSTGRES_PASSWORD: 666666
     ports:
       - "5432:5432"
     volumes:
       - ./database/init:/docker-entrypoint-initdb.d  # 初始化SQL脚本目录
       - postgres_data:/var/lib/postgresql/data  # 数据持久化
     networks:
-      - practice_network
+      - planning_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U seeking001 -d practice_gis"]
+      test: ["CMD-SHELL", "pg_isready -U planning_admin -d planning_db"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: practice_pgadmin
+    container_name: planning_pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: 313185240@qq.com  # 设置你的邮箱
-      PGADMIN_DEFAULT_PASSWORD: Snpg7814  # 设置pgAdmin登录密码
+      PGADMIN_DEFAULT_EMAIL: admin@planning.com  # 设置你的邮箱
+      PGADMIN_DEFAULT_PASSWORD: 666666  # 设置pgAdmin登录密码
     ports:
       - "5050:80"  # pgAdmin访问端口
     restart: unless-stopped
     depends_on:
       - postgres
     networks:
-      - practice_network
+      - planning_network
 
   geoserver:
     image: kartoza/geoserver  # 一个流行的、维护良好的GeoServer Docker镜像
-    container_name: practice_geoserver
+    container_name: planning_geoserver
     ports:
       - "8080:8080"  # 将本地的8080端口映射到容器的8080端口
+    volumes:
+      - E:\Projects\planning_webgis_project\database\GeoServer:/geodata
     environment:
-      - GEOSERVER_ADMIN_USER=admin   # 设置用户名
-      - GEOSERVER_ADMIN_PASSWORD=Snpg7814  # 设置管理员密码
+      GEOSERVER_ADMIN_USER: planning_admin
+      GEOSERVER_ADMIN_PASSWORD: 666666
     restart: unless-stopped
     depends_on:
       - postgres
     networks:
-      - practice_network
+      - planning_network
   
   # 后端服务
   backend:
-    container_name: practice_backend
+    container_name: planning_backend
     build: ./backend
     environment:
       - NODE_ENV=development
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=practice_gis
-      - DB_USER=seeking001
-      - DB_PASSWORD=Snpg7814
+      - DB_NAME=planning_db
+      - DB_USER=planning_admin
+      - DB_PASSWORD=666666
       - SERVER_PORT=3000
-      - CORS_ORIGIN=http://localhost:5173
     ports:
       - "3000:3000"
     volumes:
@@ -68,7 +69,7 @@ services:
       - /app/node_modules
     command: ["npm", "run", "dev"]
     networks:
-      - practice_network
+      - planning_network
     depends_on:
       postgres:
         condition: service_healthy
@@ -77,7 +78,7 @@ services:
   # 前端服务
   frontend:
     build: ./frontend
-    container_name: practice_frontend
+    container_name: planning_frontend
     environment:
       - VITE_HOST=0.0.0.0
       - HOST=0.0.0.0
@@ -90,7 +91,7 @@ services:
       - ./frontend:/app  # 代码热重载
       - /app/node_modules
     networks:
-      - practice_network
+      - planning_network
     depends_on:
       - backend
     restart: unless-stopped
@@ -100,5 +101,5 @@ volumes:
   geoserver_data:
 
 networks:
-  practice_network:
+  planning_network:
     driver: bridge

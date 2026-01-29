@@ -5,7 +5,7 @@ const { pool } = require('../config/database');
 class LandUseModel {
   // 获取土地利用数据
   static async getAllLandUse(bbox = null) {
-    let query = `
+    let sql = `
       SELECT
         id,
         name,
@@ -22,20 +22,19 @@ class LandUseModel {
     // 根据视图框添加空间过滤条件
     if (bbox && bbox.length === 4) {
       // 创建视图框
-      query += ` WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)`;
+      sql += ` WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)`;
       params.push(...bbox);  // 展开bbox数组到参数中
     }
 
-    const result = await pool.query(query, params);
+    const result = await pool.query(sql, params);  // query查询需提供sql语法和params参数
 
     // 处理查询结果：将GeoJSON字符串解析为JavaScript对象
-    return result.rows.map(row => ({
+    return result.rows.map(row => ({  // 这里的小括号相当于调用函数，得到参数
       ...row,  // 展开所有非几何字段
       geometry: JSON.parse(row.geometry)  // 解析GeoJSON几何数据
     }));
   }
 
-  // 添加土地利用数据
   // 添加土地利用数据
   static async createLandUse(data) {
     const { name, type, area, admin_region, geometry } = data;
