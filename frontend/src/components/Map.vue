@@ -1,62 +1,57 @@
 <template>
   <div class="map-wrapper">
-    <div class="map-controls">
-      <h3>地图控制</h3>
-
-      <!-- 加载数据控制 -->
-      <div class="control-item">
-        <h4>加载数据：</h4>
-        <button @click="loadFacilities">公共设施</button>
-        <button @click="loadLandUse">土地利用</button>
-      </div>
-
-      <!-- 设施类型显示控制 -->
-      <div class="control-type">
-        <h4>显示类型：</h4>
-        <div>
-          <label><input type="checkbox" v-model="facilityChecked">公共设施</label>
-          <select v-model="selectedFacilityType" @change="updateFacilityLayer" :disabled="!facilityChecked">
-            <option value="all">全部类型</option>
-            <option value="学校">学校</option>
-            <option value="医院">医院</option>
-            <option value="图书馆">图书馆</option>
-            <option value="体育馆">体育馆</option>
-            <option value="公园">公园</option>
-          </select>
-        </div>
-        <div>
-          <label><input type="checkbox" v-model="landUseChecked">土地利用</label>
-          <select v-model="selectedLandUseType" @change="updateLandUseLayer" :disabled="!landUseChecked">
-            <option value="all">全部类型</option>
-            <option value="商业用地">商业用地</option>
-            <option value="居住用地">居住用地</option>
-            <option value="工业用地">工业用地</option>
-            <option value="公园绿地">公园绿地</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- 绘制图形 -->
-      <div class="control-draw">
-        <h4>绘制添加：</h4>
-        <button @click="vectorDraw">土地利用</button>
-      </div>
-
-      <!-- 编辑图形 -->
-       <div class="control-modify">
-        <h4>编辑图形：</h4>
-        <button @click="">土地利用</button>
-       </div>
-    </div>
-
     <div class="map-content">
       <!-- 地图容器 -->
       <div ref="mapContainer" class="map-container"></div>
 
-      <!-- 地图控件容器 -->
-      <div ref="mousePosition" class="mouse-position"></div>
-      <div ref="overviewMap" class="overview-map"></div>
-      <div ref="scaleLine" class="scale-line"></div>
+      <div class="map-controls">
+        <h3>地图控制</h3>
+
+        <!-- 加载数据控制 -->
+        <div class="control-item">
+          <h4>加载数据：</h4>
+          <button @click="loadFacilities">公共设施</button>
+          <button @click="loadLandUse">土地利用</button>
+        </div>
+
+        <!-- 设施类型显示控制 -->
+        <div class="control-type">
+          <h4>显示类型：</h4>
+          <div>
+            <label><input type="checkbox" v-model="facilityChecked">公共设施</label>
+            <select v-model="selectedFacilityType" @change="updateFacilityLayer" :disabled="!facilityChecked">
+              <option value="all">全部类型</option>
+              <option value="学校">学校</option>
+              <option value="医院">医院</option>
+              <option value="图书馆">图书馆</option>
+              <option value="体育馆">体育馆</option>
+              <option value="公园">公园</option>
+            </select>
+          </div>
+          <div>
+            <label><input type="checkbox" v-model="landUseChecked">土地利用</label>
+            <select v-model="selectedLandUseType" @change="updateLandUseLayer" :disabled="!landUseChecked">
+              <option value="all">全部类型</option>
+              <option value="商业用地">商业用地</option>
+              <option value="居住用地">居住用地</option>
+              <option value="工业用地">工业用地</option>
+              <option value="公园绿地">公园绿地</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 绘制图形 -->
+        <div class="control-draw">
+          <h4>绘制添加：</h4>
+          <button @click="vectorDraw">土地利用</button>
+        </div>
+
+        <!-- 编辑图形 -->
+        <div class="control-modify">
+          <h4>编辑图形：</h4>
+          <button @click="">土地利用</button>
+        </div>
+      </div>
 
       <!-- 状态信息显示区域 -->
       <div class="sidebar">
@@ -150,134 +145,100 @@
 
 <script setup>
 // 引入vue组件
-import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 // 引入openlayers组件
-import { Map, View } from 'ol';
-import TileLayer from 'ol/layer/Tile';
-import Feature from 'ol/Feature';
-import { fromLonLat, toLonLat } from 'ol/proj';
-import XYZ from 'ol/source/XYZ';
-import VectorSource from 'ol/source/Vector';
-import VectorLayer from 'ol/layer/Vector';
-import { Style, Fill, Stroke, Text } from 'ol/style';
-import { Point, Polygon } from 'ol/geom';
-import { FullScreen, ScaleLine, MousePosition, defaults } from "ol/control";
-import { createStringXY } from "ol/coordinate";
-import { Draw, Modify } from 'ol/interaction';
+import { Map, View } from 'ol'
+import 'ol/ol.css'
+import TileLayer from 'ol/layer/Tile'
+import Feature from 'ol/Feature'
+import { fromLonLat, toLonLat } from 'ol/proj'
+import XYZ from 'ol/source/XYZ'
+import VectorSource from 'ol/source/Vector'
+import VectorLayer from 'ol/layer/Vector'
+import { Style, Fill, Stroke, Text } from 'ol/style'
+import { Point, Polygon } from 'ol/geom'
+import { FullScreen, ScaleLine, MousePosition, defaults } from "ol/control"
+import { createStringXY } from "ol/coordinate"
+import { Draw, Modify } from 'ol/interaction'
 
 // 引入状态管理和工具模块
 import { useMapDataStore } from '../stores/mapData'
-import { getMapBbox } from '../utils/mapHelpers';
+import { getMapBbox } from '../utils/mapHelpers'
 
 // 引入api组件
-import { createLandUse, updateLandUse } from '../services/api';
+import { createLandUse, updateLandUse } from '../services/api'
 
 // 地图容器和地图实例
-const mapContainer = ref(null);
-let map = null;
+const mapContainer = ref(null)
+let map = null
 
 // 定义地图控件
-const mousePosition = ref(null);
-const scaleLine = ref(null);
+const mousePosition = ref(null)
+const scaleLine = ref(null)
 
 // 图层定义
-const facilitiesLayer = ref(null);
-const landUseLayer = ref(null);
+const facilitiesLayer = ref(null)
+const landUseLayer = ref(null)
 
 // 公共设施和土地利用类型显示定义
-const facilityChecked = ref(true);
-const landUseChecked = ref(true);
-const selectedFacilityType = ref('all');
-const selectedLandUseType = ref('all');
+const facilityChecked = ref(true)
+const landUseChecked = ref(true)
+const selectedFacilityType = ref('all')
+const selectedLandUseType = ref('all')
 
 // 点击地图要素（用于弹窗显示）
-const selectedFeature = ref(null);
+const selectedFeature = ref(null)
 // 弹窗位置
-const popupPosition = ref(null);
+const popupPosition = ref(null)
 
 // 输入矢量要素（用于弹窗显示）
-const showLandUseForm = ref(false);
-const isDrawing = ref(false);
+const showLandUseForm = ref(false)
+const isDrawing = ref(false)
 const landUseForm = ref({
   name: '',
   type: '',
   admin_region: '',
   area: null
 });
-let drawFeature = null;
-let drawInteraction = null;
-let drawLayer = null;
+let drawFeature = null
+let drawInteraction = null
+let drawLayer = null
 // 土地利用图层的修改交互
-let landUseModify = null;
+let landUseModify = null
 
 // Pinia存储实例
-const mapDataStore = useMapDataStore();
+const mapDataStore = useMapDataStore()
 
 // 公共设施数量与土地利用数量
-const facilitiesCount = computed(() => mapDataStore.facilities.length);
-const landUseCount = computed(() => mapDataStore.landUse.length);
-
-// 组件挂载_初始化地图
-onMounted(() => {
-  initializeMap();
-})
-
-// 组件卸载_清理地图
-onUnmounted(() => {
-  if(map) {
-    map.setTarget(null);
-    map = null;
-  }
-})
+const facilitiesCount = computed(() => mapDataStore.facilities.length)
+const landUseCount = computed(() => mapDataStore.landUse.length)
 
 // 创建初始化地图
-function initializeMap(){
-  // 定义和配置地图控件
-  // 1. 鼠标位置显示坐标
-  const mousePositionControl = new MousePosition({
-    coordinateFormat: createStringXY(4),
-    projection: 'EPSG:4326',
-    className: 'custom-mouse-position',
-    target: mousePosition.value
-  });
-  // 2. 比例尺
-  const scaleLineControl = new ScaleLine({
-    target: scaleLine.value
-  });
-
+const initMap = () =>{
   // 配置地图
   map = new Map({
     target: mapContainer.value,
     layers: [
       new TileLayer({
         source: new XYZ({
-          url: 'http://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
+          url: 'http://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
           wrapX: false
         })
       }),
       // new TileLayer({
       //   source: new XYZ({
-      //     url: 'http://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
+      //     url: 'http://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
       //     wrapX: false
       //   })
-      // }),
+      // })
     ],
-
     // 地图视图
     view: new View({
-      center: fromLonLat([114.00, 22.55]),
-      zoom: 12
-    }),
-
-    // 添加地图控件
-    controls: defaults().extend([
-      // 全屏控件
-      new FullScreen(),
-      // 鼠标坐标控件
-      mousePositionControl,
-      // 比例尺控件
-      scaleLineControl
-    ])
+      center: [114.00, 22.55],
+      projection: 'EPSG:4326',
+      zoom: 12,
+      extent: [-180, -85, 180, 85]
+    })
   })
 
   // 设置地图交互事件（点击设施弹窗）
@@ -683,67 +644,60 @@ function cancelDraw() {
     drawLayer = null;
   }
 }
+
+// 组件挂载_初始化地图
+onMounted(() => {
+  initMap();
+})
+
+// 组件卸载_清理地图
+onUnmounted(() => {
+  if(map) {
+    map.setTarget(null);
+    map = null;
+  }
+})
 </script>
 
 
 <style>
 .map-wrapper {
-  width: 100vw;
+  width: 100%;
   overflow: hidden;
 }
 
-.ol-full-screen {
-  position: absolute;
-  top: 0;
-  right: 3px;
-}
-
-.mouse-position {
-  position: absolute;
-  bottom: 3px;
-  right: 285px;
-  padding: 0 10px;
-  color: #999;
-}
-
-.overviewmap {
-  position: absolute;
-  bottom: 100px;
-  width: 150px;
-  height: 150px;
-  background: skyblue;
-}
-
-.scale-line {
-  position:absolute;
-  left: 3px;
-  bottom: 3px;
-  color: #666;
-  text-align: center;
-  padding: 0 10px;
-  border-bottom: 1px solid #666;
-}
-
-.map-controls {
-  position: relative;
+.map-content {
+  position:relative;
   width: 100vw;
-  height: 45px;
-  background-color: rgba(100, 30, 155, 0.8);
+  height: 100vh;
+}
+
+.map-container {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 左侧边栏 - 地图控制样式 */
+.map-controls {
+  position: absolute;
+  left: 0;
+  width: 300px;
+  height: 100%;
+  background-color: rgba(30, 0, 100, 0.5);
 }
 
 .map-controls h3 {
-  position: absolute;
   line-height: 45px;
+  text-align: center;
   padding: 0 20px;
   font-size: 20px;
   color: #eee;
-  border-right: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .control-item {
-  position: absolute;
-  left: 140px;
-  top: 5px;
+  margin: 5px 10px;
   line-height: 35px;
   padding: 0 10px;
   background-color: #ccc;
@@ -764,9 +718,7 @@ function cancelDraw() {
 }
 
 .control-type {
-  position: absolute;
-  left: 430px;
-  top: 5px;
+  margin: 5px 10px;
   line-height: 35px;
   padding: 0 10px;
   background-color: #ccc;
@@ -791,9 +743,7 @@ function cancelDraw() {
 }
 
 .control-draw {
-  position: absolute;
-  left: 910px;
-  top: 5px;
+  margin: 5px 10px;
   line-height: 35px;
   padding: 0 10px;
   background-color: #ccc;
@@ -814,9 +764,7 @@ function cancelDraw() {
 }
 
 .control-modify {
-  position: absolute;
-  left: 1112px;
-  top: 5px;
+  margin: 5px 10px;
   line-height: 35px;
   padding: 0 10px;
   background-color: #ccc;
@@ -836,25 +784,13 @@ function cancelDraw() {
   padding: 0 5px;
 }
 
-.map-content {
-  position:relative;
-  width: 100vw;
-  height: 88vh;
-}
-
-.map-container {
-  position: absolute;
-  left: 0;
-  width: 80vw;
-  height: 88vh;
-}
-
+/* 右侧边栏 - 信息显示样式 */
 .sidebar {
   position: absolute;
   right: 0;
-  width: 20vw;
-  height: 88vh;
-  background-color: #eee;
+  width: 300px;
+  height: 100%;
+  background-color: rgba(30, 0, 100, 0.5);
 }
 
 .status-info {
