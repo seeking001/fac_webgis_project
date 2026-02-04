@@ -4,8 +4,8 @@
       <!-- 地图容器 -->
       <div ref="mapContainer" class="map-container"></div>
 
-      <div class="map-controls">
-        <h3>地图控制</h3>
+      <div class="left_sidebar">
+        <h3>图形操作</h3>
 
         <!-- 加载数据控制 -->
         <div class="control-item">
@@ -17,27 +17,21 @@
         <!-- 设施类型显示控制 -->
         <div class="control-type">
           <h4>显示类型：</h4>
-          <div>
-            <label><input type="checkbox" v-model="facilityChecked">公共设施</label>
-            <select v-model="selectedFacilityType" @change="updateFacilityLayer" :disabled="!facilityChecked">
-              <option value="all">全部类型</option>
-              <option value="学校">学校</option>
-              <option value="医院">医院</option>
-              <option value="图书馆">图书馆</option>
-              <option value="体育馆">体育馆</option>
-              <option value="公园">公园</option>
-            </select>
-          </div>
-          <div>
-            <label><input type="checkbox" v-model="landUseChecked">土地利用</label>
-            <select v-model="selectedLandUseType" @change="updateLandUseLayer" :disabled="!landUseChecked">
-              <option value="all">全部类型</option>
-              <option value="商业用地">商业用地</option>
-              <option value="居住用地">居住用地</option>
-              <option value="工业用地">工业用地</option>
-              <option value="公园绿地">公园绿地</option>
-            </select>
-          </div>
+          <select v-model="selectedFacilityType" @change="updateFacilityLayer">
+            <option value="all">公共设施</option>
+            <option value="学校">学校</option>
+            <option value="医院">医院</option>
+            <option value="图书馆">图书馆</option>
+            <option value="体育馆">体育馆</option>
+            <option value="公园">公园</option>
+          </select>
+          <select v-model="selectedLandUseType" @change="updateLandUseLayer">
+            <option value="all">土地利用</option>
+            <option value="商业用地">商业用地</option>
+            <option value="居住用地">居住用地</option>
+            <option value="工业用地">工业用地</option>
+            <option value="公园绿地">公园绿地</option>
+          </select>
         </div>
 
         <!-- 绘制图形 -->
@@ -54,7 +48,9 @@
       </div>
 
       <!-- 状态信息显示区域 -->
-      <div class="sidebar">
+      <div class="right_sidebar">
+        <h3>信息显示</h3>
+
         <div class="status-info">
           <h4>加载状态</h4>
           <div>✅ 公共设施 {{ facilitiesCount }} 个，土地利用 {{ landUseCount }} 个</div>
@@ -160,6 +156,9 @@ import { Point, Polygon } from 'ol/geom'
 import { FullScreen, ScaleLine, MousePosition, defaults } from "ol/control"
 import { createStringXY } from "ol/coordinate"
 import { Draw, Modify } from 'ol/interaction'
+// 引入proj4
+// import proj4 from 'proj4'
+// import { register } from 'ol/proj/proj4'
 
 // 引入状态管理和工具模块
 import { useMapDataStore } from '../stores/mapData'
@@ -168,21 +167,20 @@ import { getMapBbox } from '../utils/mapHelpers'
 // 引入api组件
 import { createLandUse, updateLandUse } from '../services/api'
 
+// 初始化proj4，定义坐标系
+// proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs')
+// proj4.defs('EPSG:4490', '+proj=longlat +ellps=GRS80 +datum=CGCS2000 +no_defs +type=crs')
+// register(proj4)
+
 // 地图容器和地图实例
 const mapContainer = ref(null)
 let map = null
-
-// 定义地图控件
-const mousePosition = ref(null)
-const scaleLine = ref(null)
 
 // 图层定义
 const facilitiesLayer = ref(null)
 const landUseLayer = ref(null)
 
 // 公共设施和土地利用类型显示定义
-const facilityChecked = ref(true)
-const landUseChecked = ref(true)
 const selectedFacilityType = ref('all')
 const selectedLandUseType = ref('all')
 
@@ -221,28 +219,27 @@ const initMap = () =>{
     layers: [
       new TileLayer({
         source: new XYZ({
-          url: 'http://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
-          wrapX: false
+          url: 'http://t0.tianditu.com/DataServer?T=img_w&x={x}&y={y}&l={z}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
         })
       }),
-      // new TileLayer({
-      //   source: new XYZ({
-      //     url: 'http://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
-      //     wrapX: false
-      //   })
-      // })
+      new TileLayer({
+        source: new XYZ({
+          url: 'http://t0.tianditu.com/DataServer?T=cia_w&x={x}&y={y}&l={z}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
+          wrapX: false
+        })
+      })
     ],
     // 地图视图
     view: new View({
-      center: [114.00, 22.55],
-      projection: 'EPSG:4326',
-      zoom: 12,
-      extent: [-180, -85, 180, 85]
+      center: fromLonLat([114.00, 22.55]),
+      zoom: 12
     })
   })
 
   // 设置地图交互事件（点击设施弹窗）
-  setupMapInteractions();
+  setupMapInteractions()
+
+  window.debugMap = map;
 }
 
 // --- 公共设施部分 ---
@@ -285,25 +282,12 @@ function updateFacilityLayer(){
   facilitiesLayer.value = new VectorLayer({
     source: vectorSource,
     style: createFacilityStyle,
-    visible: facilityChecked.value
+    visible: true
   });
 
   // 添加公共设施图层到地图
   map.addLayer(facilitiesLayer.value);
 }
-
-// 监听公共设施和土地利用复选框变化
-watch([facilityChecked, landUseChecked], () => {
-  // 控制公共设施图层
-  if(facilitiesLayer.value){
-    facilitiesLayer.value.setVisible(facilityChecked.value);
-  }
-
-  // 控制土地利用图层
-  if(landUseLayer.value){
-    landUseLayer.value.setVisible(landUseChecked.value);
-  }
-})
 
 // 创建加载公共设施函数
 async function loadFacilities(){
@@ -377,7 +361,7 @@ function updateLandUseLayer() {
   landUseLayer.value = new VectorLayer({
     source: vectorSource,
     style: createLandUseStyle,
-    visible: landUseChecked.value
+    visible: true
   });
 
   // 添加土地图层到地图
@@ -408,9 +392,7 @@ function updateLandUseLayer() {
     const coordinates = geometry.getCoordinates();
     const geoJsonGeometry = {
       type: 'Polygon',
-      coordinates: coordinates.map(ring => 
-        ring.map(coord => toLonLat(coord))
-      )
+      coordinates: coordinates
     };
 
     const landUseData = {
@@ -580,18 +562,19 @@ async function saveToDatabase() {
     const geometry = drawFeature.getGeometry();
     const coordinates = geometry.getCoordinates();
     
-    // 3. 转换为WGS84坐标（因为数据库用的是4326坐标系）
-    const wgs84Coordinates = coordinates.map(ring => 
+    const wgs84Coordinates = coordinates.map(ring =>
       ring.map(coord => toLonLat(coord))
     );
-    
-    // 4. 创建GeoJSON格式
+
+    // 3. 创建GeoJSON格式
     const geoJsonGeometry = {
       type: 'Polygon',
-      coordinates: wgs84Coordinates
+      coordinates: coordinates.map(ring =>
+        ring.map(coord => toLonLat(coord))
+      )
     };
     
-    // 5. 准备发送的数据
+    // 4. 准备发送的数据
     const landUseData = {
       name: landUseForm.value.name,
       type: landUseForm.value.type,
@@ -602,7 +585,7 @@ async function saveToDatabase() {
     
     console.log('准备保存的数据:', landUseData);
     
-    // 6. 调用API保存到数据库
+    // 5. 调用API保存到数据库
     const response = await createLandUse(landUseData);
     
     if (response.success) {
@@ -680,7 +663,7 @@ onUnmounted(() => {
 }
 
 /* 左侧边栏 - 地图控制样式 */
-.map-controls {
+.left_sidebar {
   position: absolute;
   left: 0;
   width: 300px;
@@ -688,7 +671,7 @@ onUnmounted(() => {
   background-color: rgba(30, 0, 100, 0.5);
 }
 
-.map-controls h3 {
+.left_sidebar h3 {
   line-height: 45px;
   text-align: center;
   padding: 0 20px;
@@ -698,99 +681,99 @@ onUnmounted(() => {
 
 .control-item {
   margin: 5px 10px;
-  line-height: 35px;
-  padding: 0 10px;
-  background-color: #ccc;
+  padding: 2px 10px;
+  background-color: rgba(0, 0, 0, 0.3);
   border-radius: 6px;
 }
 
 .control-item h4 {
   display:inline-block;
-  font-size: 16px;
+  font-size: 14px;
+  color: #eee;
 }
 
 .control-item button {
   display: inline-block;
-  height: 28px;
-  font-size: 16px;
+  font-size: 14px;
   margin: 0 5px;
   padding: 0 5px;
 }
 
 .control-type {
   margin: 5px 10px;
-  line-height: 35px;
-  padding: 0 10px;
-  background-color: #ccc;
+  padding: 2px 10px;
+  background-color: rgba(0, 0, 0, 0.3);
   border-radius: 6px;
 }
 
 .control-type h4 {
   display:inline-block;
-  font-size: 16px;
+  font-size: 14px;
+  color: #eee;
 }
 
-.control-type div {
+.control-type select {
   display: inline-block;
-  font-size: 16px;
-  padding: 0 5px;
-}
-
-.control-type div select {
-  height: 28px;
-  font-size: 16px;
-  padding: 0 5px;
+  margin: 0 5px;
+  padding: 2px 2px;
+  font-size: 14px;
 }
 
 .control-draw {
   margin: 5px 10px;
-  line-height: 35px;
-  padding: 0 10px;
-  background-color: #ccc;
+  padding: 2px 10px;
+  background-color: rgba(0, 0, 0, 0.3);
   border-radius: 6px;
 }
 
 .control-draw h4 {
   display:inline-block;
-  font-size: 16px;
+  font-size: 14px;
+  color: #eee;
 }
 
 .control-draw button {
   display: inline-block;
-  height: 28px;
-  font-size: 16px;
   margin: 0 5px;
   padding: 0 5px;
+  font-size: 14px;
 }
 
 .control-modify {
   margin: 5px 10px;
-  line-height: 35px;
-  padding: 0 10px;
-  background-color: #ccc;
+  padding: 2px 10px;
+  background-color: rgba(0, 0, 0, 0.3);
   border-radius: 6px;
 }
 
 .control-modify h4 {
   display:inline-block;
-  font-size: 16px;
+  font-size: 14px;
+  color: #eee;
 }
 
 .control-modify button {
   display: inline-block;
-  height: 28px;
-  font-size: 16px;
+  font-size: 14px;
   margin: 0 5px;
   padding: 0 5px;
 }
 
 /* 右侧边栏 - 信息显示样式 */
-.sidebar {
+.right_sidebar {
   position: absolute;
   right: 0;
   width: 300px;
   height: 100%;
   background-color: rgba(30, 0, 100, 0.5);
+}
+
+.right_sidebar h3 {
+  line-height: 45px;
+  text-align: center;
+  padding: 0 20px;
+  font-size: 20px;
+  color: #eee;
 }
 
 .status-info {
