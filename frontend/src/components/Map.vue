@@ -4,57 +4,98 @@
       <!-- 地图容器 -->
       <div ref="mapContainer" class="map-container"></div>
 
+      <!-- 左侧边栏 -->
       <div class="left_sidebar">
         <h3>图形操作</h3>
-
-        <!-- 加载数据控制 -->
-        <div class="control-item">
-          <h4>加载数据：</h4>
-          <button @click="loadFacilities">公共设施</button>
-          <button @click="loadLandUse">土地利用</button>
-        </div>
-
-        <!-- 设施类型显示控制 -->
-        <div class="control-type">
-          <h4>显示类型：</h4>
-          <select v-model="selectedFacilityType" @change="updateFacilityLayer">
-            <option value="all">公共设施</option>
-            <option value="学校">学校</option>
-            <option value="医院">医院</option>
-            <option value="图书馆">图书馆</option>
-            <option value="体育馆">体育馆</option>
-            <option value="公园">公园</option>
-          </select>
-          <select v-model="selectedLandUseType" @change="updateLandUseLayer">
-            <option value="all">土地利用</option>
-            <option value="商业用地">商业用地</option>
-            <option value="居住用地">居住用地</option>
-            <option value="工业用地">工业用地</option>
-            <option value="公园绿地">公园绿地</option>
-          </select>
-        </div>
-
-        <!-- 绘制图形 -->
-        <div class="control-draw">
-          <h4>绘制添加：</h4>
-          <button @click="vectorDraw">土地利用</button>
-        </div>
-
-        <!-- 编辑图形 -->
-        <div class="control-modify">
-          <h4>编辑图形：</h4>
-          <button @click="">土地利用</button>
+        
+        <div class="layer-panel" v-for="(config, key) in layers" :key="key">
+          <!-- 版块标题 -->
+          <h4>{{ config.name }}</h4>
+          
+          <!-- 1. 加载与显示控制 -->
+          <div class="control-group">
+            <input 
+              type="checkbox" 
+              v-model="config.visible"
+              @change="toggleLayer(key)"
+            >
+            <span>加载显示</span>
+            <select 
+              v-model="config.selectedType" 
+              @change="onTypeChange(key)"
+              :disabled="!config.visible"
+            >
+              <option v-for="type in config.types" :value="type.value">
+                {{ type.label }}
+              </option>
+            </select>
+          </div>
+          
+          <!-- 2. 绘制与编辑图形 -->
+          <div class="control-group">
+            <button @click="startDrawing(key)" :disabled="!config.visible">
+              绘制添加
+            </button>
+            <button @click="toggleEditMode(key)" 
+                    :class="{ 'active': config.editable }"
+                    :disabled="!config.visible || !config.loaded">
+              {{ config.editable ? '结束编辑' : '编辑图形' }}
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- 状态信息显示区域 -->
+      <!-- 右侧边栏 -->
       <div class="right_sidebar">
         <h3>信息显示</h3>
 
         <div class="status-info">
           <h4>加载状态</h4>
-          <div>✅ 公共设施 {{ facilitiesCount }} 个，土地利用 {{ landUseCount }} 个</div>
+          <div v-for="(config, key) in layers">
+            <span v-if="config.loaded">
+              ✅ {{ config.name }}: {{ key === 'facilities' ? facilitiesCount : landUseCount }} 个
+            </span>
+            <span v-else>◻️ {{ config.name }}: 未加载</span>
+          </div>
         </div>
+      </div>
+
+      <!-- 底图切换控件 -->
+      <div class="basemap-switcher"
+          @mouseenter="basemapPanelVisible = true"
+          @mouseleave="basemapPanelVisible = false">
+        <!-- 主按钮 -->
+        <button class="basemap-main-btn">
+          {{ getActiveBasemap.name }} ▾
+        </button>
+        
+        <!-- 滑出面板 -->
+        <transition name="slide-down">
+          <div class="basemap-panel" v-if="basemapPanelVisible">
+            <div class="basemap-item" 
+                v-for="item in basemaps" 
+                :key="item.id"
+                :class="{ 'active': item.id === activeBasemapId }"
+                @click="switchBasemap(item.id)">
+              <!-- 缩略图 (暂时用色块代替，后期替换为图片) -->
+              <div class="thumbnail" :style="{ backgroundColor: getThumbColor(item.id) }">
+                {{ item.name }}
+              </div>
+              <!-- 底图名称与路网控制 -->
+              <div class="basemap-info">
+                <div class="basemap-name">{{ item.name }}</div>
+                <!-- 路网复选框（仅普通和卫星地图显示） -->
+                <label class="roadnet-toggle" v-if="item.hasRoadNet">
+                  <input type="checkbox" 
+                        v-model="item.roadNetVisible"
+                        @click.stop
+                        @change="toggleRoadNet(item)">
+                  <span>路网</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </transition>
       </div>
       
       <!-- 点击设施要素弹窗 -->
@@ -176,14 +217,6 @@ import { createLandUse, updateLandUse } from '../services/api'
 const mapContainer = ref(null)
 let map = null
 
-// 图层定义
-const facilitiesLayer = ref(null)
-const landUseLayer = ref(null)
-
-// 公共设施和土地利用类型显示定义
-const selectedFacilityType = ref('all')
-const selectedLandUseType = ref('all')
-
 // 点击地图要素（用于弹窗显示）
 const selectedFeature = ref(null)
 // 弹窗位置
@@ -207,96 +240,365 @@ let landUseModify = null
 // Pinia存储实例
 const mapDataStore = useMapDataStore()
 
-// 公共设施数量与土地利用数量
-const facilitiesCount = computed(() => mapDataStore.facilities.length)
-const landUseCount = computed(() => mapDataStore.landUse.length)
-
-// 创建初始化地图
-const initMap = () =>{
-  // 配置地图
-  map = new Map({
-    target: mapContainer.value,
-    layers: [
-      new TileLayer({
-        source: new XYZ({
-          url: 'http://t0.tianditu.com/DataServer?T=img_w&x={x}&y={y}&l={z}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
-        })
-      }),
-      new TileLayer({
-        source: new XYZ({
-          url: 'http://t0.tianditu.com/DataServer?T=cia_w&x={x}&y={y}&l={z}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
-          wrapX: false
-        })
-      })
-    ],
-    // 地图视图
-    view: new View({
-      center: fromLonLat([114.00, 22.55]),
-      zoom: 12
-    })
-  })
-
-  // 设置地图交互事件（点击设施弹窗）
-  setupMapInteractions()
-
-  window.debugMap = map;
-}
-
-// --- 公共设施部分 ---
-// 添加filteredFacilities计算属性
-const filteredFacilities = computed(() => {
-  if(selectedFacilityType.value === 'all'){
-    return mapDataStore.facilities;
-  } else {
-    return mapDataStore.facilities.filter(facility => facility.type === selectedFacilityType.value);
+const layers = ref({
+  facilities: {
+    name: '公共设施',
+    visible: false,         // 对应复选框
+    loaded: false,          // 数据是否已加载
+    layer: null,            // 对应的VectorLayer实例
+    selectedType: 'all',    // 当前选中的分类
+    drawType: 'Point',      // 绘制类型（若未来需要绘制设施点）
+    types: [                // 可选的分类
+      { label: '全部类型', value: 'all' },
+      { label: '学校', value: '学校' },
+      { label: '医院', value: '医院' },
+      { label: '图书馆', value: '图书馆' },
+      { label: '体育馆', value: '体育馆' },
+      { label: '公园', value: '公园' }
+    ]
+  },
+  landUse: {
+    name: '土地利用',
+    visible: false,
+    loaded: false,
+    layer: null,
+    selectedType: 'all',
+    drawType: 'Polygon',    // 绘制类型为面
+    editable: false,
+    types: [
+      { label: '全部类型', value: 'all' },
+      { label: '商业用地', value: '商业用地' },
+      { label: '居住用地', value: '居住用地' },
+      { label: '工业用地', value: '工业用地' },
+      { label: '公园绿地', value: '公园绿地' }
+    ]
   }
 });
 
-// 创建公共设施图层重新渲染函数
-function updateFacilityLayer(){
-  // 创建矢量源
-  const vectorSource = new VectorSource();
-  // 遍历过滤后的公共设施数据
-  filteredFacilities.value.forEach(facility => {
-    const coordinates = facility.geometry.coordinates;
-    const point = new Point(fromLonLat(coordinates));
-    const feature = new Feature({
-      geometry: point,
-      name: facility.name,
-      type: facility.type,
-      address: facility.address,
-      capacity: facility.capacity,
-      admin_region: facility.admin_region,
-      layerType: 'facility'
-    });
-    // 往矢量源中添加图形数据
-    vectorSource.addFeature(feature);
+// 底图管理
+const basemaps = ref([
+  {
+    id: 'vector',
+    name: '普通地图',
+    layer: null,
+    thumbnail: 'path/to/vector-thumb.jpg', // 缩略图路径（可后补）
+    url: 'http://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
+    hasRoadNet: true, // 是否有路网图层
+    roadNetVisible: true, // 路网是否显示
+    roadNetUrl: 'http://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
+    roadNetLayer: null
+  },
+  {
+    id: 'satellite',
+    name: '卫星地图',
+    layer: null,
+    thumbnail: 'path/to/satellite-thumb.jpg',
+    url: 'http://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
+    hasRoadNet: true,
+    roadNetVisible: true,
+    roadNetUrl: 'http://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
+    roadNetLayer: null
+  },
+  {
+    id: '3d',
+    name: '三维地图',
+    layer: null,
+    thumbnail: 'path/to/3d-thumb.jpg',
+    url: '', // 预留，后续对接Cesium
+    hasRoadNet: false,
+    roadNetVisible: false
+  }
+]);
+
+// 当前激活的底图ID
+const activeBasemapId = ref('vector');
+// 控制底图切换面板的显示
+const basemapPanelVisible = ref(false);
+
+// 公共设施数量与土地利用数量
+const facilitiesCount = computed(() => mapDataStore.facilities.length);
+const landUseCount = computed(() => mapDataStore.landUse.length);
+
+// 创建初始化地图
+const initMap = () =>{
+  map = new Map({
+    target: mapContainer.value,
+    layers: [],
+    view: new View({
+      center: fromLonLat([114.00, 22.55]),
+      zoom: 12
+    }),
+    controls: defaults().extend([
+      new FullScreen(),    // 全屏控件
+      new ScaleLine(),     // 比例尺
+      new MousePosition({  // 鼠标位置
+        coordinateFormat: createStringXY(4),
+        projection: 'EPSG:4326'
+      })
+    ])
   })
 
-  // 如果已有公共设施图层，先移除旧图层
-  if(facilitiesLayer.value){
-    map.removeLayer(facilitiesLayer.value);
-  }
+  // 初始化默认底图
+  switchBasemap('vector')
 
-  // 创建公共设施新图层
-  facilitiesLayer.value = new VectorLayer({
-    source: vectorSource,
-    style: createFacilityStyle,
-    visible: true
+  // 地图交互事件（点击设施弹窗）
+  setupMapInteractions()
+}
+
+// 3. 通用方法
+// A. 切换图层显示/加载
+async function toggleLayer(layerKey) {
+  const layerObj = layers.value[layerKey];
+  if (layerObj.visible && !layerObj.loaded) {
+    // 首次勾选：加载数据
+    const bbox = getMapBbox(map);
+    if (layerKey === 'facilities') {
+      await mapDataStore.loadFacilities(bbox);
+    } else {
+      await mapDataStore.loadLandUse(bbox);
+    }
+    layerObj.loaded = true;
+    updateVectorLayer(layerKey); // 创建并显示图层
+  } else if (layerObj.layer) {
+    // 非首次：直接切换可见性
+    layerObj.layer.setVisible(layerObj.visible);
+  }
+}
+
+// B. 更新矢量图层 (替代原来的 updateFacilityLayer 和 updateLandUseLayer)
+function updateVectorLayer(layerKey) {
+  const layerObj = layers.value[layerKey];
+  const storeData = layerKey === 'facilities' ? mapDataStore.facilities : mapDataStore.landUse;
+  const styleFunc = layerKey === 'facilities' ? createFacilityStyle : createLandUseStyle;
+  const isPoint = layerKey === 'facilities';
+
+  // 过滤数据
+  const filteredData = layerObj.selectedType === 'all' 
+    ? storeData 
+    : storeData.filter(item => item.type === layerObj.selectedType);
+
+  // 创建矢量源
+  const source = new VectorSource();
+  filteredData.forEach(item => {
+    const geom = isPoint 
+      ? new Point(fromLonLat(item.geometry.coordinates))
+      : new Polygon(item.geometry.coordinates).transform('EPSG:4326', 'EPSG:3857');
+    
+    const featureProps = {
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      layerType: layerKey
+    };
+
+    const feature = new Feature({
+      geometry: geom,
+      ...featureProps
+    });
+    source.addFeature(feature);
   });
 
-  // 添加公共设施图层到地图
-  map.addLayer(facilitiesLayer.value);
+  // 移除旧图层，创建新图层
+  if (layerObj.layer) map.removeLayer(layerObj.layer);
+  layerObj.layer = new VectorLayer({
+    source,
+    style: styleFunc,
+    visible: layerObj.visible // 关键：同步可见性状态
+  });
+  map.addLayer(layerObj.layer);
+
+  // ---------- 新增的修复代码块（只在土地利用版块生效） ----------
+  if (layerKey === 'landUse') {
+    // 1. 移除旧的修改交互（如果存在）
+    if (landUseModify) {
+      map.removeInteraction(landUseModify);
+      landUseModify = null; // 可选，清理引用
+    }
+    
+    // 2. 创建新的修改交互，绑定到当前新的矢量源
+    landUseModify = new Modify({
+      source: source // 关键：绑定到刚创建的新 source
+    });
+    
+    // 3. 重新绑定要素修改完成的监听事件
+    landUseModify.on('modifyend', async (event) => {
+      const features = event.features.getArray();
+      const feature = features[0];
+      const id = feature.get('id');
+      
+      // 获取更新后的属性
+      const name = feature.get('name');
+      const type = feature.get('type');
+      const area = feature.get('area');
+      const admin_region = feature.get('admin_region');
+      
+      // 获取几何数据并转换为GeoJSON (WGS84)
+      const geometry = feature.getGeometry();
+      const coordinates = geometry.getCoordinates();
+      const wgs84Coordinates = coordinates.map(ring =>
+        ring.map(coord => toLonLat(coord)) // 确保 toLonLat 已导入
+      );
+      
+      const geoJsonGeometry = {
+        type: 'Polygon',
+        coordinates: wgs84Coordinates
+      };
+      
+      const landUseData = {
+        name,
+        type,
+        area,
+        admin_region,
+        geometry: geoJsonGeometry
+      };
+      
+      try {
+        const response = await updateLandUse(id, landUseData);
+        if (response.success) {
+          console.log('土地利用更新成功');
+        } else {
+          console.error('更新失败:', response.message);
+        }
+      } catch (error) {
+        console.error('更新请求失败:', error);
+      }
+    });
+    
+    // 4. 将新的交互添加到地图
+    map.addInteraction(landUseModify);
+    // 根据当前的编辑状态设置交互是否激活
+    landUseModify.setActive(layerObj.editable);
+  }
 }
 
-// 创建加载公共设施函数
-async function loadFacilities(){
-  const bbox = getMapBbox(map);
-  await mapDataStore.loadFacilities(bbox);
-  // 调用重新渲染函数
-  updateFacilityLayer();
+// C. 分类切换处理
+function onTypeChange(layerKey) {
+  if (layers.value[layerKey].loaded) {
+    updateVectorLayer(layerKey);
+  }
 }
 
+// D. 启动绘图 (统一入口)
+function startDrawing(layerKey) {
+  const layerObj = layers.value[layerKey];
+  // 这里可以扩展，例如设施绘制点，土地利用绘制面
+  if (layerKey === 'landUse') {
+    vectorDraw(); // 调用你原有的土地利用绘图函数
+  } else {
+    alert(`启动${layerObj.name}绘制功能`);
+    // 未来可在此处初始化设施点绘制
+  }
+}
+
+function toggleEditMode(layerKey) {
+  const layerObj = layers.value[layerKey];
+  if (layerKey === 'landUse' && layerObj.loaded) {
+    layerObj.editable = !layerObj.editable;
+    // 控制 Modify 交互的激活状态
+    if (landUseModify) {
+      landUseModify.setActive(layerObj.editable);
+    }
+    // 可以在这里改变按钮样式或给出提示
+    console.log(`${layerObj.name} 编辑模式: ${layerObj.editable ? '开启' : '关闭'}`);
+  }
+}
+
+// -- 地图切换处理 --
+// 获取当前激活的底图对象（计算属性）
+const getActiveBasemap = computed(() => {
+  return basemaps.value.find(b => b.id === activeBasemapId.value) || basemaps.value[0];
+});
+
+// 切换底图
+function switchBasemap(basemapId) {
+  if (activeBasemapId.value === basemapId) return;
+  
+  const oldBasemap = basemaps.value.find(b => b.id === activeBasemapId.value);
+  const newBasemap = basemaps.value.find(b => b.id === basemapId);
+  
+  if (!newBasemap) return;
+
+  if (!newBasemap.url) {
+    alert('三维地图功能正在开发中，敬请期待！');
+    return;
+  }
+  
+  // 1. 移除所有现有的底图和路网图层
+  const currentLayers = map.getLayers().getArray();
+  
+  basemaps.value.forEach(b => {
+    if (b.layer && currentLayers.includes(b.layer)) {
+      map.removeLayer(b.layer);
+    }
+    if (b.roadNetLayer && currentLayers.includes(b.roadNetLayer)) {
+      map.removeLayer(b.roadNetLayer);
+    }
+  });
+  
+  // 2. 创建或获取新底图图层
+  if (!newBasemap.layer) {
+    newBasemap.layer = new TileLayer({
+      source: new XYZ({
+        url: newBasemap.url,
+        wrapX: false,
+        crossOrigin: 'anonymous'
+      }),
+      zIndex: 0 // 确保底图在最底层
+    });
+  }
+  
+  // 3. 添加底图到地图（添加到最底层）
+  map.addLayer(newBasemap.layer);
+  
+  // 4. 处理路网（如果有且需要显示）
+  if (newBasemap.hasRoadNet && newBasemap.roadNetVisible) {
+    if (!newBasemap.roadNetLayer) {
+      newBasemap.roadNetLayer = new TileLayer({
+        source: new XYZ({
+          url: newBasemap.roadNetUrl,
+          wrapX: false,
+          crossOrigin: 'anonymous'
+        }),
+        zIndex: 1 // 路网在底图之上
+      });
+    }
+    map.addLayer(newBasemap.roadNetLayer);
+  }
+  
+  // 5. 更新状态
+  activeBasemapId.value = basemapId;
+}
+
+// 切换路网显示
+function toggleRoadNet(basemap) {
+  // 确保只对当前激活的底图操作
+  if (basemap.id !== activeBasemapId.value) return;
+  
+  if (basemap.roadNetVisible && !basemap.roadNetLayer) {
+    // 创建并显示路网
+    basemap.roadNetLayer = new TileLayer({
+      source: new XYZ({
+        url: basemap.roadNetUrl,
+        wrapX: false,
+        crossOrigin: 'anonymous'
+      }),
+      zIndex: 1
+    });
+    map.addLayer(basemap.roadNetLayer);
+  } else if (!basemap.roadNetVisible && basemap.roadNetLayer) {
+    // 移除路网
+    map.removeLayer(basemap.roadNetLayer);
+  }
+}
+
+// 辅助函数：为缩略图生成临时颜色
+function getThumbColor(id) {
+  const colors = { vector: '#4CAF50', satellite: '#795548', '3d': '#2196F3' };
+  return colors[id] || '#ccc';
+}
+
+
+// --- 公共设施部分 ---
 // 创建公共设施样式函数
 function createFacilityStyle(feature){
   const type = feature.get('type');  // 此处的feature在其它函数调用时生效
@@ -322,110 +624,6 @@ function getFacilityIcon(type){
 }
 
 // --- 土地利用部分 ---
-// 添加filteredLandUse计算属性
-const filteredLandUse = computed(() => {
-  if(selectedLandUseType.value === 'all'){
-    return mapDataStore.landUse;
-  } else {
-    return mapDataStore.landUse.filter(landUse => landUse.type === selectedLandUseType.value)
-  }
-})
-
-// 创建土地利用图层重新渲染函数
-function updateLandUseLayer() {
-  // 创建矢量源
-  const vectorSource = new VectorSource();
-  // 遍历过滤后的土地利用数据
-  filteredLandUse.value.forEach(landUse => {
-    const coordinates = landUse.geometry.coordinates;
-    const polygon = new Polygon(coordinates).transform('EPSG:4326', 'EPSG:3857');
-    const feature = new Feature({
-      geometry: polygon,
-      id: landUse.id,
-      name: landUse.name,
-      type: landUse.type,
-      area: landUse.area,
-      admin_region: landUse.admin_region,
-      layerType: 'landUse'
-    });
-    // 往矢量源中添加图形数据
-    vectorSource.addFeature(feature);
-  })
-
-  // 如果已有土地利用图层，先移除旧图层
-  if(landUseLayer.value){
-    map.removeLayer(landUseLayer.value)
-  };
-
-  // 创建土地利用新图层
-  landUseLayer.value = new VectorLayer({
-    source: vectorSource,
-    style: createLandUseStyle,
-    visible: true
-  });
-
-  // 添加土地图层到地图
-  map.addLayer(landUseLayer.value);
-
-  // 添加修改交互：让所有土地利用地块都可以编辑
-  if(landUseModify){
-    map.removeInteraction(landUseModify);
-  }
-
-  landUseModify = new Modify({
-    source: vectorSource
-  });
-
-  // 添加要素修改监听
-  landUseModify.on('modifyend', async (event) => {
-    const features = event.features.getArray();
-    // 假设一次只修改一个要素
-    const feature = features[0];
-    const id = feature.get('id');
-    const name = feature.get('name');
-    const type = feature.get('type');
-    const area = feature.get('area');
-    const admin_region = feature.get('admin_region');
-    
-    // 获取几何数据并转换为GeoJSON
-    const geometry = feature.getGeometry();
-    const coordinates = geometry.getCoordinates();
-    const geoJsonGeometry = {
-      type: 'Polygon',
-      coordinates: coordinates
-    };
-
-    const landUseData = {
-      name,
-      type,
-      area,
-      admin_region,
-      geometry: geoJsonGeometry
-    };
-
-    try {
-      const response = await updateLandUse(id, landUseData);
-      if (response.success) {
-        console.log('更新成功');
-      } else {
-        console.error('更新失败:', response.message);
-      }
-    } catch (error) {
-      console.error('更新请求失败:', error);
-    }
-  });
-
-  map.addInteraction(landUseModify);
-}
-
-// 创建加载土地利用数据函数
-async function loadLandUse() {
-  const bbox = getMapBbox(map);
-  await mapDataStore.loadLandUse(bbox);
-  // 调用重新渲染函数
-  updateLandUseLayer();
-}
-
 // 创建土地利用样式函数
 function createLandUseStyle(feature) {
   const type = feature.get('type');
@@ -679,85 +877,52 @@ onUnmounted(() => {
   color: #eee;
 }
 
-.control-item {
+.layer-panel {
   margin: 5px 10px;
-  padding: 2px 10px;
-  background-color: rgba(0, 0, 0, 0.3);
-  border-radius: 6px;
+  padding: 5px;
+  background: rgba(0, 0, 30, 0.4);
+  border-radius: 8px;
 }
-
-.control-item h4 {
-  display:inline-block;
+.layer-panel h4 {
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  color: #b3c6ff;
+  font-size: 16px;
+  text-align: center;
+}
+.control-group {
+  display: flex;
+  margin: 10px 0;
+  gap: 5px;
+  align-items: center;
   font-size: 14px;
   color: #eee;
 }
-
-.control-item button {
-  display: inline-block;
+.control-group select {
+  padding: 3px 5px;
   font-size: 14px;
-  margin: 0 5px;
-  padding: 0 5px;
+  border-radius: 5px;
+  border: none;
 }
-
-.control-type {
-  margin: 5px 10px;
-  padding: 2px 10px;
-  background-color: rgba(0, 0, 0, 0.3);
-  border-radius: 6px;
-}
-
-.control-type h4 {
-  display:inline-block;
+.control-group button {
+  padding: 3px 5px;
   font-size: 14px;
+  border-radius: 5px;
+  background: #309eff;
   color: #eee;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.control-group button:hover:not(:disabled) {
+  background: #66ccff;
+}
+.control-group button:disabled,
+.control-group select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.control-type select {
-  display: inline-block;
-  margin: 0 5px;
-  padding: 2px 2px;
-  font-size: 14px;
-}
-
-.control-draw {
-  margin: 5px 10px;
-  padding: 2px 10px;
-  background-color: rgba(0, 0, 0, 0.3);
-  border-radius: 6px;
-}
-
-.control-draw h4 {
-  display:inline-block;
-  font-size: 14px;
-  color: #eee;
-}
-
-.control-draw button {
-  display: inline-block;
-  margin: 0 5px;
-  padding: 0 5px;
-  font-size: 14px;
-}
-
-.control-modify {
-  margin: 5px 10px;
-  padding: 2px 10px;
-  background-color: rgba(0, 0, 0, 0.3);
-  border-radius: 6px;
-}
-
-.control-modify h4 {
-  display:inline-block;
-  font-size: 14px;
-  color: #eee;
-}
-
-.control-modify button {
-  display: inline-block;
-  font-size: 14px;
-  margin: 0 5px;
-  padding: 0 5px;
-}
 
 /* 右侧边栏 - 信息显示样式 */
 .right_sidebar {
@@ -779,18 +944,124 @@ onUnmounted(() => {
 .status-info {
   position: absolute;
   bottom: 0;
-  width: 20vw;
-  background-color: rgba(0, 0, 0, 0.2);
+  width: 300px;
+  background-color: rgba(0, 0, 0, 0.4);
 }
 
 .status-info h4 {
+  padding: 3px 5px;
   text-align: center;
-  font-size: 18px;
-  color: #666;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 16px;
+  color: #ccc;
 }
 
 .status-info div {
+  margin: 1px 0;
   color: #52c41a;
+}
+
+/* 底图切换器样式 */
+.basemap-switcher {
+  position: absolute;
+  top: 60px; /* 位于你的主标题下方 */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99;
+}
+
+.basemap-main-btn {
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #dcdcdc;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s;
+}
+.basemap-main-btn:hover {
+  background: white;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
+/* 滑出面板 */
+.basemap-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 8px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 滑出动画 */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
+  opacity: 1;
+  transform: translateY(0);
+}
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* 底图项 */
+.basemap-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.basemap-item:hover {
+  background: #f5f5f5;
+}
+.basemap-item.active {
+  background: #e8f4fd;
+  border: 1px solid #2196F3;
+}
+
+.thumbnail {
+  width: 60px;
+  height: 60px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 12px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.basemap-info {
+  flex: 1;
+}
+
+.basemap-name {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.roadnet-toggle {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: #666;
+  cursor: pointer;
+}
+.roadnet-toggle input {
+  margin-right: 4px;
 }
 
 /* 要素信息弹窗样式 */
