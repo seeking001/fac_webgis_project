@@ -8,16 +8,13 @@
       <div class="left_sidebar">
         <h3>图形操作</h3>
         
+        <!-- 图形操作按钮 -->
         <div class="layer-panel" v-for="(config, key) in layers" :key="key">
           <h4>{{ config.name }}</h4>
           
           <!-- 1. 加载与显示控制 -->
           <div class="control-group">
-            <input 
-              type="checkbox" 
-              v-model="config.visible"
-              @change="toggleLayer(key)"
-            >
+            <input type="checkbox" v-model="config.visible" @change="toggleLayer(key)">
             <span>加载显示</span>
             <select 
               v-model="config.selectedType" 
@@ -60,30 +57,21 @@
       </div>
 
       <!-- 底图切换控件 -->
-      <div class="basemap-switcher"
-          @mouseenter="basemapPanelVisible = true"
-          @mouseleave="basemapPanelVisible = false">
+      <div class="basemap-switcher" @mouseenter="basemapPanelVisible = true" @mouseleave="basemapPanelVisible = false">
         <button class="basemap-main-btn">
-          {{ getActiveBasemap.name }} ▾
+          {{ getActiveBasemap.name }}
         </button>
         
         <transition name="slide-down">
           <div class="basemap-panel" v-if="basemapPanelVisible">
-            <div class="basemap-item" 
-                v-for="item in basemaps" 
-                :key="item.id"
-                :class="{ 'active': item.id === activeBasemapId }"
-                @click="switchBasemap(item.id)">
+            <div class="basemap-item" v-for="item in basemaps" :key="item.id" :class="{ 'active': item.id === activeBasemapId }" @click="switchBasemap(item.id)">
               <div class="thumbnail" :style="{ backgroundColor: getThumbColor(item.id) }">
                 {{ item.name }}
               </div>
               <div class="basemap-info">
                 <div class="basemap-name">{{ item.name }}</div>
                 <label class="roadnet-toggle" v-if="item.hasRoadNet">
-                  <input type="checkbox" 
-                        v-model="item.roadNetVisible"
-                        @click.stop
-                        @change="toggleRoadNet(item)">
+                  <input type="checkbox" v-model="item.roadNetVisible" @click.stop @change="toggleRoadNet(item)">
                   <span>路网</span>
                 </label>
               </div>
@@ -210,6 +198,42 @@ let landUseModify = null
 
 const mapDataStore = useMapDataStore()
 
+const basemaps = ref([
+  {
+    id: 'vector',
+    name: '普通地图',
+    layer: null,
+    url: 'http://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
+    hasRoadNet: true,
+    roadNetVisible: true,
+    roadNetUrl: 'http://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
+    roadNetLayer: null
+  },
+  {
+    id: 'satellite',
+    name: '卫星地图',
+    layer: null,
+    url: 'http://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
+    hasRoadNet: true,
+    roadNetVisible: true,
+    roadNetUrl: 'http://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
+    roadNetLayer: null
+  },
+  {
+    id: '3d',
+    name: '三维地图',
+    layer: null,
+    url: null,
+    hasRoadNet: false,
+    roadNetVisible: false,
+    roadNetUrl: null,
+    roadNetLayer: null
+  }
+]);
+
+const activeBasemapId = ref('vector');
+const basemapPanelVisible = ref(false);
+
 const layers = ref({
   facilities: {
     name: '公共设施',
@@ -245,51 +269,34 @@ const layers = ref({
   }
 });
 
-const basemaps = ref([
-  {
-    id: 'vector',
-    name: '普通地图',
-    layer: null,
-    url: 'http://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
-    hasRoadNet: true,
-    roadNetVisible: true,
-    roadNetUrl: 'http://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
-    roadNetLayer: null
-  },
-  {
-    id: 'satellite',
-    name: '卫星地图',
-    layer: null,
-    url: 'http://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
-    hasRoadNet: true,
-    roadNetVisible: true,
-    roadNetUrl: 'http://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
-    roadNetLayer: null
-  },
-  {
-    id: '3d',
-    name: '三维地图',
-    layer: null,
-    url: null,
-    hasRoadNet: false,
-    roadNetVisible: false,
-    roadNetUrl: null
-  }
-]);
-
-const activeBasemapId = ref('vector');
-const basemapPanelVisible = ref(false);
-
 const facilitiesCount = computed(() => mapDataStore.facilities.length);
 const landUseCount = computed(() => mapDataStore.landUse.length);
 
 // 创建初始化地图
 const initMap = () => {
   if (!mapContainer.value) return;
+
+  // 初始底图
+  const initLayer = new TileLayer({
+    source: new XYZ({
+      url: basemaps.value[0].url,
+      wrapX: false,
+      crossOrigin: 'anonymous'
+    })
+  });
+
+  // 初始路网
+  const initRoadLayer = new TileLayer({
+    source: new XYZ({
+      url: basemaps.value[0].roadNetUrl,
+      wrapX: false,
+      crossOrigin: 'anonymous'
+    })
+  });
   
   map = new Map({
     target: mapContainer.value,
-    layers: [],
+    layers: [initLayer, initRoadLayer],
     view: new View({
       center: fromLonLat([114.00, 22.55]),
       zoom: 12,
@@ -305,64 +312,76 @@ const initMap = () => {
     ])
   });
   
-  console.log('地图实例创建成功');
-  
-  // 原始可工作的代码：直接添加底图
-  const testLayer = new TileLayer({
-    source: new XYZ({
-      url: 'http://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=5911fa4ad51d6af49b0b3be1eba86a2f',
-      wrapX: false,
-      crossOrigin: 'anonymous'
-    })
-  });
-  
-  map.addLayer(testLayer);
-  basemaps.value[0].layer = testLayer;
-  
-  console.log('测试底图已添加');
+  // map.addLayer(testLayer);
+  // map.addLayer(testRoadLayer);
+  basemaps.value[0].layer = initLayer;
+  basemaps.value[0].roadNetLayer = initRoadLayer;
   
   // 设置交互
   setupMapInteractions();
-  
-  // 立即更新尺寸
-  setTimeout(() => {
-    if (map) {
-      map.updateSize();
-      console.log('地图初始化完成');
-    }
-  }, 100);
 };
 
-// 初始化所有底图和路网图层
-function initBasemapLayers() {
-  basemaps.value.forEach(basemap => {
-    // 创建底图图层
-    if (basemap.url) {
-      basemap.layer = new TileLayer({
-        source: new XYZ({
-          url: basemap.url,
-          wrapX: false,
-          crossOrigin: 'anonymous'
-        }),
-        visible: false,
-        zIndex: 0
-      });
-      map.addLayer(basemap.layer);
-    }
-    
-    // 创建路网图层
-    if (basemap.hasRoadNet && basemap.roadNetUrl) {
-      basemap.roadNetLayer = new TileLayer({
-        source: new XYZ({
-          url: basemap.roadNetUrl,
-          wrapX: false,
-          crossOrigin: 'anonymous'
-        }),
-        visible: false
-      });
-      map.addLayer(basemap.roadNetLayer);
+// 定义激活地图
+const getActiveBasemap = computed(() => {
+  return basemaps.value.find(b => b.id === activeBasemapId.value);
+});
+
+// 切换地图函数
+function switchBasemap(basemapId) {
+  if (!map) return;
+  if (activeBasemapId.value === basemapId) return;
+  
+  if (basemapId === '3d') {
+    alert('三维地图功能正在开发中…');
+    return;
+  }
+  
+  // 1. 移除所有瓦片图层
+  const oldLayers = map.getLayers().getArray();
+  oldLayers.forEach(layer => {
+    if (layer instanceof TileLayer) {
+      map.removeLayer(layer);
     }
   });
+  
+  // 创建新地图
+  const newBasemap = basemaps.value.find(b => b.id === basemapId);
+  // 2. 添加地图
+  const baseLayer = new TileLayer({
+    source: new XYZ({
+      url: newBasemap.url,
+      wrapX: false,
+      crossOrigin: 'anonymous'
+    }),
+    zIndex: 0
+  });
+  map.addLayer(baseLayer);
+  newBasemap.layer = baseLayer;
+  
+  // 3. 添加路网
+  const roadLayer = new TileLayer({
+    source: new XYZ({
+      url: newBasemap.roadNetUrl,
+      wrapX: false,
+      crossOrigin: 'anonymous'
+    }),
+    visible: newBasemap.roadNetVisible,
+    zIndex: 1
+  });
+  map.addLayer(roadLayer);
+  newBasemap.roadNetLayer = roadLayer;
+  
+  activeBasemapId.value = basemapId;
+}
+
+// 切换路网可见性函数
+function toggleRoadNet(basemap) {
+  basemap.roadNetLayer.setVisible(basemap.roadNetVisible);
+}
+
+function getThumbColor(id) {
+  const colors = { vector: '#4CAF50', satellite: '#795548', '3d': '#2196F3' };
+  return colors[id] || '#ccc';
 }
 
 async function toggleLayer(layerKey) {
@@ -412,7 +431,8 @@ function updateVectorLayer(layerKey) {
   layerObj.layer = new VectorLayer({
     source,
     style: styleFunc,
-    visible: layerObj.visible
+    visible: layerObj.visible,
+    zIndex: 2
   });
   
   map.addLayer(layerObj.layer);
@@ -448,84 +468,6 @@ function toggleEditMode(layerKey) {
     layerObj.editable = !layerObj.editable;
     if (landUseModify) landUseModify.setActive(layerObj.editable);
   }
-}
-
-const getActiveBasemap = computed(() => {
-  return basemaps.value.find(b => b.id === activeBasemapId.value) || basemaps.value[0];
-});
-
-// 切换底图函数
-function switchBasemap(basemapId) {
-  console.log('切换底图到:', basemapId);
-  
-  if (!map) return;
-  if (activeBasemapId.value === basemapId) return;
-  
-  if (basemapId === '3d') {
-    alert('三维地图功能正在开发中，后续使用Cesium实现！');
-    return;
-  }
-  
-  const newBasemap = basemaps.value.find(b => b.id === basemapId);
-  if (!newBasemap || !newBasemap.url) return;
-  
-  // 简单直接的方法：先清除，再添加
-  const oldLayers = map.getLayers().getArray();
-  
-  // 1. 移除所有瓦片图层
-  oldLayers.forEach(layer => {
-    if (layer instanceof TileLayer) {
-      map.removeLayer(layer);
-    }
-  });
-  
-  // 2. 添加新底图
-  const baseLayer = new TileLayer({
-    source: new XYZ({
-      url: newBasemap.url,
-      wrapX: false,
-      crossOrigin: 'anonymous'
-    })
-  });
-  map.addLayer(baseLayer);
-  newBasemap.layer = baseLayer;
-  
-  // 3. 添加路网 - 这是关键修复！
-  if (newBasemap.hasRoadNet && newBasemap.roadNetVisible && newBasemap.roadNetUrl) {
-    const roadLayer = new TileLayer({
-      source: new XYZ({
-        url: newBasemap.roadNetUrl,
-        wrapX: false,
-        crossOrigin: 'anonymous'
-      })
-    });
-    map.addLayer(roadLayer);
-    newBasemap.roadNetLayer = roadLayer;
-  }
-  
-  activeBasemapId.value = basemapId;
-  
-  // 4. 更新地图
-  setTimeout(() => {
-    map.updateSize();
-    console.log('切换完成');
-  }, 50);
-}
-
-// 切换路网函数
-function toggleRoadNet(basemap) {
-  console.log('切换路网:', basemap.name, '状态:', basemap.roadNetVisible);
-  
-  // 确保只对当前激活的底图操作
-  if (basemap.id !== activeBasemapId.value) return;
-  
-  // 重新调用switchBasemap，让switchBasemap重新处理图层
-  switchBasemap(basemap.id);
-}
-
-function getThumbColor(id) {
-  const colors = { vector: '#4CAF50', satellite: '#795548', '3d': '#2196F3' };
-  return colors[id] || '#ccc';
 }
 
 function createFacilityStyle(feature) {
@@ -809,19 +751,20 @@ onUnmounted(() => {
   color: #52c41a;
 }
 
+/* 地图切换样式 */
 .basemap-switcher {
   position: absolute;
-  top: 60px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 99;
+  top: 15px;
+  left: 305px;
+  z-index: 3;
 }
 
 .basemap-main-btn {
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.95);
+  padding: 3px 5px;
+  background: rgba(0, 0, 0, 0.5);
   border: 1px solid #dcdcdc;
   border-radius: 4px;
+  color: #eee;
   font-size: 14px;
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
@@ -830,49 +773,50 @@ onUnmounted(() => {
 .basemap-main-btn:hover {
   background: white;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  color: #333;
 }
 
 .basemap-panel {
   position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 8px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  padding: 12px;
-  min-width: 200px;
   display: flex;
+  padding: 5px;
+  margin-top: 5px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 5px;
+  min-width: 155px;
   flex-direction: column;
-  gap: 10px;
+  gap: 5px;
 }
 
 .slide-down-enter-active,
 .slide-down-leave-active {
-  transition: all 0.3s ease;
+  transition: all 0.6s ease;
   opacity: 1;
   transform: translateY(0);
 }
 .slide-down-enter-from,
 .slide-down-leave-to {
   opacity: 0;
-  transform: translateY(-10px);
+  transform: translateY(-5px);
 }
 
 .basemap-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   padding: 8px;
   border-radius: 6px;
+  color: #eee;
   cursor: pointer;
   transition: background 0.2s;
 }
 .basemap-item:hover {
-  background: #f5f5f5;
+  background: rgba(255, 255, 255, 0.8);
+  color: #333;
 }
 .basemap-item.active {
-  background: #e8f4fd;
+  background: rgba(255, 255, 255, 0.8);
+  color: #333;
   border: 1px solid #2196F3;
 }
 
@@ -893,6 +837,7 @@ onUnmounted(() => {
 }
 
 .basemap-name {
+  font-size: 14px;
   font-weight: bold;
   margin-bottom: 4px;
 }
@@ -901,7 +846,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   font-size: 12px;
-  color: #666;
+  color: #999;
   cursor: pointer;
 }
 .roadnet-toggle input {
