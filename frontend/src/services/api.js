@@ -27,7 +27,7 @@ async function request(url, options = {}) {
   return data;
 }
 
-// 导出公共服务设施的api
+// 获取公共服务设施api
 export async function getFacilities(bbox = null) {
   let url = '/facilities';  // 默认的API路径，与app.js中app.use('/api/facilities', facilitiesRoutes);保持一致
 
@@ -41,7 +41,7 @@ export async function getFacilities(bbox = null) {
   return request(url);
 }
 
-// 导出土地利用的api
+// 获取土地利用api
 export async function getLandUse(bbox = null) {
   let url = '/landUse';
   if (bbox && bbox.length === 4) {
@@ -51,11 +51,32 @@ export async function getLandUse(bbox = null) {
   return request(url);
 }
 
+// 创建公共设施
+export async function createFacility(facilityData) {
+  return request('/facilities', {
+    method: 'POST',
+    body: JSON.stringify(facilityData)
+  });
+}
+
+// 更新公共设施
+export async function updateFacility(id, facilityData) {
+  return request(`/facilities/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(facilityData)
+  });
+}
+
+// 删除公共设施
+export async function deleteFacility(id) {
+  return request(`/facilities/${id}`, {
+    method: 'DELETE'
+  });
+}
+
 // 创建土地利用数据
 export async function createLandUse(landUseData) {
-  const url = '/landUse';
-
-  return request(url, {
+  return request('/landUse', {
     method: 'POST',
     body: JSON.stringify(landUseData)
   });
@@ -63,10 +84,15 @@ export async function createLandUse(landUseData) {
 
 // 更新土地利用数据
 export async function updateLandUse(id, landUseData) {
-  const url = `/landUse/${id}`;
-
-  return request(url, {
+  return request(`/landUse/${id}`, {
     method: 'PUT',
     body: JSON.stringify(landUseData)
+  });
+}
+
+// 删除图形
+export async function deleteLandUse(id) {
+  return request(`/landUse/${id}`, {
+    method: 'DELETE'
   });
 }

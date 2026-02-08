@@ -35,6 +35,107 @@ class FacilityModel {
       geometry: JSON.parse(row.geometry)  // 解析GeoJSON几何数据
     }));
   }
+
+  // 创建公共服务设施
+  static async createFacility(data) {
+    const { name, type, address, capacity, admin_region, geometry } = data;
+
+    const query = `
+    INSERT INTO public_facilities 
+      (name, type, address, capacity, admin_region, geom)
+    VALUES ($1, $2, $3, $4, $5, ST_SetSRID(ST_GeomFromGeoJSON($6), 4326))
+    RETURNING 
+      id, name, type, address, capacity, admin_region, 
+      ST_AsGeoJSON(geom) as geometry, created_at
+  `;
+
+    const params = [
+      name || '未命名设施',
+      type || '学校',
+      address || '',
+      capacity || 0,
+      admin_region || '未知区域',
+      JSON.stringify(geometry)
+    ];
+
+    try {
+      const result = await pool.query(query, params);
+      const row = result.rows[0];
+
+      return {
+        ...row,
+        geometry: JSON.parse(row.geometry)
+      };
+    } catch (error) {
+      console.error('创建设施失败:', error);
+      throw error;
+    }
+  }
+
+  // 更新公共服务设施
+  static async updateFacility(id, data) {
+    const { name, type, address, capacity, admin_region, geometry } = data;
+
+    const query = `
+    UPDATE public_facilities
+    SET
+      name = COALESCE($1, name),
+      type = COALESCE($2, type),
+      address = COALESCE($3, address),
+      capacity = COALESCE($4, capacity),
+      admin_region = COALESCE($5, admin_region),
+      geom = COALESCE(ST_SetSRID(ST_GeomFromGeoJSON($6), 4326), geom)
+    WHERE id = $7
+    RETURNING 
+      id, name, type, address, capacity, admin_region, 
+      ST_AsGeoJSON(geom) as geometry, created_at
+  `;
+
+    const params = [
+      name || null,
+      type || null,
+      address || null,
+      capacity || null,
+      admin_region || null,
+      geometry ? JSON.stringify(geometry) : null,
+      id
+    ];
+
+    try {
+      const result = await pool.query(query, params);
+      if (result.rows.length === 0) {
+        throw new Error('设施未找到');
+      }
+      const row = result.rows[0];
+
+      return {
+        ...row,
+        geometry: JSON.parse(row.geometry)
+      };
+    } catch (error) {
+      console.error('更新设施失败:', error);
+      throw error;
+    }
+  }
+
+  // 删除公共服务设施
+  static async deleteFacility(id) {
+    const query = `
+    DELETE FROM public_facilities
+    WHERE id = $1
+    RETURNING id
+  `;
+
+    const params = [id];
+
+    try {
+      const result = await pool.query(query, params);
+      return result.rows[0];
+    } catch (error) {
+      console.error('删除失败:', error);
+      throw error;
+    }
+  }
 }
 
 // 导出FacilityModel类

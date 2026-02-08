@@ -4,6 +4,30 @@
       <!-- 地图容器 -->
       <div ref="mapContainer" class="map-container"></div>
 
+      <!-- 底图切换控件 -->
+      <div class="basemap-switcher" @mouseenter="basemapPanelVisible = true" @mouseleave="basemapPanelVisible = false">
+        <button class="basemap-main-btn">
+          {{ getActiveBasemap.name }}
+        </button>
+        
+        <transition name="slide-down">
+          <div class="basemap-panel" v-if="basemapPanelVisible">
+            <div class="basemap-item" v-for="item in basemaps" :key="item.id" :class="{ 'active': item.id === activeBasemapId }" @click="switchBasemap(item.id)">
+              <div class="thumbnail" :style="{ backgroundColor: getThumbColor(item.id) }">
+                {{ item.name }}
+              </div>
+              <div class="basemap-info">
+                <div class="basemap-name">{{ item.name }}</div>
+                <label class="roadnet-toggle" v-if="item.hasRoadNet">
+                  <input type="checkbox" v-model="item.roadNetVisible" @click.stop @change="toggleRoadNet(item)">
+                  <span>标注/路网</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </transition>
+      </div>
+
       <!-- 左侧边栏 -->
       <div class="left_sidebar">
         <h3>图形操作</h3>
@@ -55,40 +79,16 @@
           </div>
         </div>
       </div>
-
-      <!-- 底图切换控件 -->
-      <div class="basemap-switcher" @mouseenter="basemapPanelVisible = true" @mouseleave="basemapPanelVisible = false">
-        <button class="basemap-main-btn">
-          {{ getActiveBasemap.name }}
-        </button>
-        
-        <transition name="slide-down">
-          <div class="basemap-panel" v-if="basemapPanelVisible">
-            <div class="basemap-item" v-for="item in basemaps" :key="item.id" :class="{ 'active': item.id === activeBasemapId }" @click="switchBasemap(item.id)">
-              <div class="thumbnail" :style="{ backgroundColor: getThumbColor(item.id) }">
-                {{ item.name }}
-              </div>
-              <div class="basemap-info">
-                <div class="basemap-name">{{ item.name }}</div>
-                <label class="roadnet-toggle" v-if="item.hasRoadNet">
-                  <input type="checkbox" v-model="item.roadNetVisible" @click.stop @change="toggleRoadNet(item)">
-                  <span>路网</span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </transition>
-      </div>
       
       <!-- 点击设施要素弹窗 -->
       <div v-if="selectedFeature && popupPosition" :style="{left: popupPosition.x + 'px', top: popupPosition.y + 'px'}" class="feature-popup">
         <div class="popup-content">
           <button @click="closePopup" class="close-btn">x</button>
           <h4>{{ selectedFeature.name }}</h4>
-          <div v-if="selectedFeature.layerType === 'facility'">
+          <div v-if="selectedFeature.layerType === 'facilities'">
             <p><strong>类型：</strong>{{ selectedFeature.type }}</p>
             <p><strong>地址：</strong>{{ selectedFeature.address }}</p>
-            <p><strong>规模：</strong>{{ selectedFeature.capacity }}</p>
+            <p><strong>建筑面积：</strong>{{ selectedFeature.capacity }}平方米</p>
             <p><strong>行政区：</strong>{{ selectedFeature.admin_region }}</p>
           </div>
           <div v-else>
@@ -96,15 +96,74 @@
             <p><strong>用地面积：</strong>{{ selectedFeature.area }}平方米</p>
             <p><strong>行政区：</strong>{{ selectedFeature.admin_region }}</p>
           </div>
+          <button v-if="selectedFeature" 
+                  @click="deleteFeature(selectedFeature.id)"
+                  class="delete-btn">
+            删除{{ selectedFeature.layerType === 'facilities' ? '设施' : '用地' }}
+          </button>
         </div>
       </div>
 
-      <!-- 添加数据属性表单弹窗 -->
+      <!-- 添加公共设施属性表单弹窗 -->
+      <div v-if="showFacilityForm" class="facility-form">
+        <div class="form-overlay" @click="cancelDraw"></div>
+        <div class="form-content">
+          <h4>添加公共设施</h4>
+          <form @submit.prevent="saveFacilityToDatabase">
+            <div class="form-group">
+              <label>名称：</label>
+              <input v-model="facilityForm.name" required placeholder="例如：龙华中学">
+            </div>
+
+            <div class="form-group">
+              <label>类型：</label>
+              <select v-model="facilityForm.type" required>
+                <option value="">请选择类型</option>
+                <option value="学校">学校</option>
+                <option value="医院">医院</option>
+                <option value="图书馆">图书馆</option>
+                <option value="体育馆">体育馆</option>
+                <option value="公园">公园</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>地址：</label>
+              <input v-model="facilityForm.address" required placeholder="详细地址">
+            </div>
+
+            <div class="form-group">
+              <label>建筑面积（平方米）：</label>
+              <input v-model="facilityForm.capacity" type="number" required placeholder="手动输入">
+            </div>
+
+            <div class="form-group">
+              <label>行政区：</label>
+              <select v-model="facilityForm.admin_region" required>
+                <option value="">请选择区域</option>
+                <option value="福田区">福田区</option>
+                <option value="南山区">南山区</option>
+                <option value="罗湖区">罗湖区</option>
+                <option value="宝安区">宝安区</option>
+                <option value="龙华区">龙华区</option>
+                <option value="光明区">光明区</option>
+              </select>
+            </div>
+
+            <div class="form-buttons">
+              <button type="button" @click="cancelDraw" class="btn-cancel">取消</button>
+              <button type="submit" class="btn-save">保存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- 添加土地利用属性表单弹窗 -->
       <div v-if="showLandUseForm" class="landuse-form">
         <div class="form-overlay" @click="cancelDraw"></div>
         <div class="form-content">
           <h4>添加土地利用</h4>
-          <form @submit.prevent="saveToDatabase">
+          <form @submit.prevent="saveLandUseToDatabase">
             <div class="form-group">
               <label>名称：</label>
               <input
@@ -129,16 +188,18 @@
             <div class="form-group">
               <label>行政区：</label>
               <select v-model="landUseForm.admin_region" required>
-                <option value="">请选择类型</option>
+                <option value="">请选择区域</option>
                 <option value="福田区">福田区</option>
                 <option value="南山区">南山区</option>
                 <option value="罗湖区">罗湖区</option>
                 <option value="宝安区">宝安区</option>
+                <option value="龙华区">龙华区</option>
+                <option value="光明区">光明区</option>
               </select>
             </div>
 
             <div class="form-group">
-              <label>面积（平方米）：</label>
+              <label>用地面积（平方米）：</label>
               <input
                 v-model="landUseForm.area"
                 type="number"
@@ -168,7 +229,7 @@ import { fromLonLat, toLonLat } from 'ol/proj'
 import XYZ from 'ol/source/XYZ'
 import VectorSource from 'ol/source/Vector'
 import VectorLayer from 'ol/layer/Vector'
-import { Style, Fill, Stroke, Text } from 'ol/style'
+import { Style, Fill, Stroke, Text, Circle } from 'ol/style'
 import { Point, Polygon } from 'ol/geom'
 import { FullScreen, ScaleLine, MousePosition, defaults } from "ol/control"
 import { createStringXY } from "ol/coordinate"
@@ -176,15 +237,23 @@ import { Draw, Modify } from 'ol/interaction'
 
 import { useMapDataStore } from '../stores/mapData'
 import { getMapBbox } from '../utils/mapHelpers'
-import { createLandUse } from '../services/api'
+import { createFacility, updateFacility, deleteFacility, createLandUse, updateLandUse, deleteLandUse } from '../services/api'
 
 const mapContainer = ref(null)
 let map = null
 
 const selectedFeature = ref(null)
 const popupPosition = ref(null)
+const showFacilityForm = ref(false)
 const showLandUseForm = ref(false)
 const isDrawing = ref(false)
+const facilityForm = ref({
+  name: '',
+  type: '',
+  address: '',
+  capacity: null,
+  admin_region: ''
+})
 const landUseForm = ref({
   name: '',
   type: '',
@@ -194,6 +263,7 @@ const landUseForm = ref({
 let drawFeature = null
 let drawInteraction = null
 let drawLayer = null
+let facilityModify = null
 let landUseModify = null
 
 const mapDataStore = useMapDataStore()
@@ -242,6 +312,7 @@ const layers = ref({
     layer: null,
     selectedType: 'all',
     drawType: 'Point',
+    editable: false,
     types: [
       { label: '全部类型', value: 'all' },
       { label: '学校', value: '学校' },
@@ -307,13 +378,12 @@ const initMap = () => {
       new ScaleLine(),
       new MousePosition({
         coordinateFormat: createStringXY(4),
-        projection: 'EPSG:4326'
+        projection: 'EPSG:4326',
+        className: 'custom-mouse-position'
       })
     ])
   });
   
-  // map.addLayer(testLayer);
-  // map.addLayer(testRoadLayer);
   basemaps.value[0].layer = initLayer;
   basemaps.value[0].roadNetLayer = initRoadLayer;
   
@@ -337,11 +407,9 @@ function switchBasemap(basemapId) {
   }
   
   // 1. 移除所有瓦片图层
-  const oldLayers = map.getLayers().getArray();
+  const oldLayers = map.getLayers().getArray().filter(layer => layer instanceof TileLayer);
   oldLayers.forEach(layer => {
-    if (layer instanceof TileLayer) {
-      map.removeLayer(layer);
-    }
+    map.removeLayer(layer);
   });
   
   // 创建新地图
@@ -421,7 +489,11 @@ function updateVectorLayer(layerKey) {
       id: item.id,
       name: item.name,
       type: item.type,
-      layerType: layerKey
+      layerType: layerKey,
+      address: item.address,
+      capacity: item.capacity,
+      admin_region: item.admin_region,
+      area: item.area
     });
     source.addFeature(feature);
   });
@@ -436,7 +508,47 @@ function updateVectorLayer(layerKey) {
   });
   
   map.addLayer(layerObj.layer);
+
+  // 公共设施编辑功能
+  if (layerKey === 'facilities') {
+    if (facilityModify) {
+      map.removeInteraction(facilityModify);
+      facilityModify = null;
+    }
+    
+    facilityModify = new Modify({ source: source });
+    
+    // 编辑完成保存
+    facilityModify.on('modifyend', async (event) => {
+      const modifiedFeature = event.features.item(0);
+      const id = modifiedFeature.get('id');
+      
+      try {
+        const coords = toLonLat(modifiedFeature.getGeometry().getCoordinates());
+        const updateData = {
+          name: modifiedFeature.get('name') || '未命名设施',
+          type: modifiedFeature.get('type') || '学校',
+          address: modifiedFeature.get('address') || '',
+          capacity: modifiedFeature.get('capacity') || 0,
+          admin_region: modifiedFeature.get('admin_region') || '龙华区',
+          geometry: {
+            type: 'Point',
+            coordinates: coords
+          }
+        };
+        
+        await updateFacility(id, updateData);
+        console.log('✅ 设施位置已保存');
+      } catch (error) {
+        console.log('保存失败', error);
+      }
+    });
+    
+    map.addInteraction(facilityModify);
+    facilityModify.setActive(layers.value.facilities.editable || false);
+  }
   
+  // 土地利用编辑功能
   if (layerKey === 'landUse') {
     if (landUseModify) {
       map.removeInteraction(landUseModify);
@@ -446,11 +558,86 @@ function updateVectorLayer(layerKey) {
     landUseModify = new Modify({ source: source });
     
     landUseModify.on('modifyend', async (event) => {
-      // 修改完成事件处理
+      const modifiedFeature = event.features.item(0);
+      const id = modifiedFeature.get('id');
+
+      try {
+        // 获取当前几何（EPSG:3857）
+        const geometry = modifiedFeature.getGeometry();
+        const coords3857 = geometry.getCoordinates();
+        
+        // **关键：将坐标转换为 EPSG:4326（经纬度）**
+        const coords4326 = coords3857.map(ring => 
+          ring.map(coord => toLonLat(coord))
+        );
+
+        // 获取要素所有属性
+        const updateData = {
+          name: modifiedFeature.get('name') || '未命名地块',
+          type: modifiedFeature.get('type') || '居住用地',
+          admin_region: modifiedFeature.get('admin_region') || '龙华区',
+          area: modifiedFeature.get('area') || 0,
+          geometry: {
+            type: 'Polygon',
+            coordinates: coords4326
+          }
+        };
+      
+        // 调用API保存
+        await updateLandUse(id, updateData);
+        console.log('✅ 保存成功');
+      } catch (error) {
+        console.log('保存失败', error);
+      }
     });
     
     map.addInteraction(landUseModify);
     landUseModify.setActive(layerObj.editable);
+  }
+}
+
+// 删除图形函数
+async function deleteFeature(featureId) {
+  if (!selectedFeature.value) return;
+  
+  const layerType = selectedFeature.value.layerType;
+  const featureName = layerType === 'facilities' ? '设施' : '图形';
+  if (!confirm(`确定要删除这个${featureName}吗？`)) return;
+  
+  try {
+    // 根据类型调用不同的API
+    if (layerType === 'landUse') {
+      await deleteLandUse(featureId);
+    } else if (layerType === 'facilities') {
+      await deleteFacility(featureId);
+    }
+    
+    // 从前端移除
+    const source = layers.value[layerType]?.layer?.getSource();
+    const feature = source?.getFeatures().find(f => f.get('id') === featureId);
+    if (feature) source.removeFeature(feature);
+    
+    // 更新store
+    if (layerType === 'facilities') {
+      mapDataStore.facilities = mapDataStore.facilities.filter(item => item.id !== featureId);
+    } else {
+      mapDataStore.landUse = mapDataStore.landUse.filter(item => item.id !== featureId);
+    }
+    
+    closePopup();
+    alert('删除成功');
+    
+  } catch (error) {
+    console.error('删除API调用失败:', error);
+    
+    // 如果API没实现，提示用户
+    alert('后端删除API未实现，刷新页面后会恢复');
+    
+    // 还是在前端删除（演示用）
+    const source = layers.value[layerType]?.layer?.getSource();
+    const feature = source?.getFeatures().find(f => f.get('id') === featureId);
+    if (feature) source.removeFeature(feature);
+    closePopup();
   }
 }
 
@@ -459,14 +646,190 @@ function onTypeChange(layerKey) {
 }
 
 function startDrawing(layerKey) {
-  if (layerKey === 'landUse') vectorDraw();
+  if (layerKey === 'landUse') {
+    landUseDraw();
+  } else if (layerKey === 'facilities'){
+    facilityDraw();
+  }
 }
 
+// 公共设施绘制功能
+function facilityDraw() {
+  if (drawInteraction) map.removeInteraction(drawInteraction);
+  
+  isDrawing.value = true;
+  
+  const source = new VectorSource();
+  drawLayer = new VectorLayer({
+    source,
+    style: new Style({
+      image: new Circle({
+        radius: 4,
+        fill: new Fill({ color: 'purple' })
+      })
+    })
+  });
+  map.addLayer(drawLayer);
+  
+  drawInteraction = new Draw({
+    source,
+    type: 'Point',
+    style: new Style({
+      image: new Circle({
+        radius: 4,
+        fill: new Fill({ color: 'purple' })
+      })
+    })
+  });
+
+  drawInteraction.on('drawend', (event) => {
+    drawFeature = event.feature;
+    showFacilityForm.value = true; // 新增弹窗状态
+  });
+
+  map.addInteraction(drawInteraction);
+}
+
+// 土地利用绘制功能
+function landUseDraw() {
+  if (drawInteraction) map.removeInteraction(drawInteraction);
+  
+  isDrawing.value = true;
+  
+  const source = new VectorSource();
+  drawLayer = new VectorLayer({
+    source,
+    style: new Style({
+      fill: new Fill({ color: 'rgba(50, 0, 100, 0.3)' }),
+      stroke: new Stroke({ color: 'purple', width: 1.5 })
+    })
+  });
+  map.addLayer(drawLayer);
+  
+  drawInteraction = new Draw({
+    source,
+    type: 'Polygon',
+    style: new Style({
+      fill: new Fill({ color: 'rgba(50, 0, 100, 0.3)' }),
+      stroke: new Stroke({ color: 'purple', width: 1.5 })
+    })
+  });
+
+  drawInteraction.on('drawend', (event) => {
+    drawFeature = event.feature;
+    showLandUseForm.value = true;
+  });
+
+  map.addInteraction(drawInteraction);
+}
+
+// 保存公共设施数据
+async function saveFacilityToDatabase() {
+  try {
+    if (!facilityForm.value.name || !drawFeature) return;
+    
+    const coords = toLonLat(drawFeature.getGeometry().getCoordinates());
+    
+    const facilityData = {
+      name: facilityForm.value.name,
+      type: facilityForm.value.type,
+      address: facilityForm.value.address,
+      capacity: facilityForm.value.capacity || 0,
+      admin_region: facilityForm.value.admin_region,
+      geometry: {
+        type: 'Point',
+        coordinates: coords
+      }
+    };
+    
+    const response = await createFacility(facilityData);
+    
+    if (response.success) {
+      // 添加到图层
+      drawFeature.set('id', response.data.id);
+      drawFeature.set('name', facilityForm.value.name);
+      drawFeature.set('type', facilityForm.value.type);
+      drawFeature.set('address', facilityForm.value.address);
+      drawFeature.set('capacity', facilityForm.value.capacity || 0);
+      drawFeature.set('admin_region', facilityForm.value.admin_region);
+      drawFeature.set('layerType', 'facilities');
+      
+      layers.value.facilities.layer?.getSource()?.addFeature(drawFeature);
+      mapDataStore.facilities.push(response.data);  // 更新store
+      cancelDraw();
+    }
+    
+  } catch (error) {
+    console.error('保存失败:', error);
+  }
+}
+
+// 保存土地利用数据
+async function saveLandUseToDatabase() {
+  try {
+    if (!landUseForm.value.name || !drawFeature) return;
+    
+    // 保存到数据库
+    const response = await createLandUse({
+      name: landUseForm.value.name,
+      type: landUseForm.value.type,
+      geometry: {
+        type: 'Polygon',
+        coordinates: drawFeature.getGeometry().getCoordinates().map(ring => 
+          ring.map(coord => toLonLat(coord))
+        )
+      },
+      area: landUseForm.value.area || 0,
+      admin_region: landUseForm.value.admin_region || '福田区'
+    });
+    
+    if (response.success) {
+      // 直接使用已绘制的图形，设置ID和属性
+      drawFeature.set('id', response.data.id);
+      drawFeature.set('name', landUseForm.value.name);
+      drawFeature.set('type', landUseForm.value.type);
+      drawFeature.set('admin_region', landUseForm.value.admin_region);
+      drawFeature.set('area', landUseForm.value.area || 0);
+      drawFeature.set('layerType', 'landUse');
+      
+      // 添加到土地利用图层
+      layers.value.landUse.layer?.getSource()?.addFeature(drawFeature);
+      
+      alert('保存成功！');
+      cancelDraw();
+    }
+  } catch (error) {
+    console.error('保存失败:', error);
+  }
+}
+
+function cancelDraw() {
+  showLandUseForm.value = false;
+  showFacilityForm.value = false;
+  landUseForm.value = { name: '', type: '', admin_region: '', area: null };
+  facilityForm.value = { name: '', type: '', address: '', capacity: null, admin_region: '' };
+  drawFeature = null;
+  isDrawing.value = false;
+  
+  if (drawInteraction) {
+    map.removeInteraction(drawInteraction);
+    drawInteraction = null;
+  }
+  if (drawLayer) {
+    map.removeLayer(drawLayer);
+    drawLayer = null;
+  }
+}
+
+// 编辑图形函数
 function toggleEditMode(layerKey) {
   const layerObj = layers.value[layerKey];
   if (layerKey === 'landUse' && layerObj.loaded) {
     layerObj.editable = !layerObj.editable;
     if (landUseModify) landUseModify.setActive(layerObj.editable);
+  } else if (layerKey === 'facilities' && layerObj.loaded) {
+    layerObj.editable = !layerObj.editable;
+    if (facilityModify) facilityModify.setActive(layerObj.editable);
   }
 }
 
@@ -528,100 +891,10 @@ function closePopup() {
   popupPosition.value = null;
 }
 
-function vectorDraw() {
-  if (drawInteraction) map.removeInteraction(drawInteraction);
-  
-  isDrawing.value = true;
-  
-  const source = new VectorSource();
-  drawLayer = new VectorLayer({
-    source,
-    style: new Style({
-      fill: new Fill({ color: 'rgba(255, 0, 0, 0.5)' }),
-      stroke: new Stroke({ color: 'red', width: 1.5 })
-    })
-  });
-  map.addLayer(drawLayer);
-  
-  drawInteraction = new Draw({
-    source,
-    type: 'Polygon',
-    style: new Style({
-      fill: new Fill({ color: 'rgba(255, 0, 0, 0.5)' }),
-      stroke: new Stroke({ color: 'red', width: 1.5 })
-    })
-  });
-
-  drawInteraction.on('drawend', (event) => {
-    drawFeature = event.feature;
-    showLandUseForm.value = true;
-  });
-
-  map.addInteraction(drawInteraction);
-}
-
-async function saveToDatabase() {
-  try {
-    if (!landUseForm.value.name || !drawFeature) {
-      alert('请填写地块名称');
-      return;
-    }
-    
-    const geometry = drawFeature.getGeometry();
-    const coordinates = geometry.getCoordinates();
-
-    const landUseData = {
-      name: landUseForm.value.name,
-      type: landUseForm.value.type,
-      geometry: {
-        type: 'Polygon',
-        coordinates: coordinates.map(ring => ring.map(coord => toLonLat(coord)))
-      },
-      area: landUseForm.value.area || 0,
-      admin_region: landUseForm.value.admin_region || '福田区'
-    };
-    
-    const response = await createLandUse(landUseData);
-    
-    if (response.success) {
-      alert('保存成功！');
-      await mapDataStore.loadLandUse(getMapBbox(map));
-      cancelDraw();
-    } else {
-      alert('保存失败: ' + response.message);
-    }
-    
-  } catch (error) {
-    console.error('保存失败:', error);
-    alert('保存失败，请检查控制台');
-  }
-}
-
-function cancelDraw() {
-  showLandUseForm.value = false;
-  landUseForm.value = { name: '', type: '', admin_region: '', area: null };
-  drawFeature = null;
-  isDrawing.value = false;
-  
-  if (drawInteraction) {
-    map.removeInteraction(drawInteraction);
-    drawInteraction = null;
-  }
-  if (drawLayer) {
-    map.removeLayer(drawLayer);
-    drawLayer = null;
-  }
-}
-
 onMounted(() => {
   setTimeout(() => {
     if (!mapContainer.value) return;
-    
-    if (mapContainer.value.offsetWidth === 0 || mapContainer.value.offsetHeight === 0) {
-      setTimeout(() => initMap(), 500);
-    } else {
-      initMap();
-    }
+    initMap();
   }, 300);
 });
 
@@ -653,115 +926,54 @@ onUnmounted(() => {
   height: 100%;
 }
 
-.left_sidebar {
+/* 地图控件样式 */
+/* 放大缩小控件 */
+.ol-zoom {
   position: absolute;
-  left: 0;
-  width: 300px;
-  height: 100%;
-  background-color: rgba(30, 0, 100, 0.5);
+  left: 305px;
+  top: 5px;
 }
 
-.left_sidebar h3 {
-  line-height: 45px;
-  text-align: center;
-  padding: 0 20px;
-  font-size: 20px;
-  color: #eee;
-}
-
-.layer-panel {
-  margin: 5px 10px;
-  padding: 5px;
-  background: rgba(0, 0, 30, 0.4);
-  border-radius: 8px;
-}
-.layer-panel h4 {
-  padding-bottom: 5px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  color: #b3c6ff;
-  font-size: 16px;
-  text-align: center;
-}
-.control-group {
-  display: flex;
-  margin: 10px 0;
-  gap: 5px;
-  align-items: center;
-  font-size: 14px;
-  color: #eee;
-}
-.control-group select {
-  padding: 3px 5px;
-  font-size: 14px;
-  border-radius: 5px;
-  border: none;
-}
-.control-group button {
-  padding: 3px 5px;
-  font-size: 14px;
-  border-radius: 5px;
-  background: #309eff;
-  color: #eee;
-  border: none;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.control-group button:hover:not(:disabled) {
-  background: #66ccff;
-}
-.control-group button:disabled,
-.control-group select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.right_sidebar {
+/* 比例尺控件 */
+.ol-scale-line {
   position: absolute;
-  right: 0;
-  width: 300px;
-  height: 100%;
-  background-color: rgba(30, 0, 100, 0.5);
+  left: 305px;
+  bottom: 5px;
+  height: 20px;
+  background: rgba(0,0,0,0.1);
 }
 
-.right_sidebar h3 {
-  line-height: 45px;
-  text-align: center;
-  padding: 0 20px;
-  font-size: 20px;
-  color: #eee;
-}
-
-.status-info {
+/* 地图全屏控件 */
+.ol-full-screen {
   position: absolute;
-  bottom: 0;
-  width: 300px;
-  background-color: rgba(0, 0, 0, 0.4);
+  right: 305px;
+  top: 5px;
 }
 
-.status-info h4 {
-  padding: 3px 5px;
-  text-align: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  font-size: 16px;
-  color: #ccc;
-}
-
-.status-info div {
-  margin: 1px 0;
-  color: #52c41a;
+/* 鼠标坐标控件 */
+.custom-mouse-position {
+  position: absolute;
+  right: 305px;
+  bottom: 5px;
+  height: 20px;
+  background: rgba(0,0,0,0.1);
+  font-size: 12px;
+  color: #333;
+  padding: 0 10px;
+  border-radius: 3px;
 }
 
 /* 地图切换样式 */
 .basemap-switcher {
   position: absolute;
-  top: 15px;
+  top: 60px;
   left: 305px;
   z-index: 3;
 }
 
 .basemap-main-btn {
   padding: 3px 5px;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.3);
   border: 1px solid #dcdcdc;
   border-radius: 4px;
   color: #eee;
@@ -783,7 +995,7 @@ onUnmounted(() => {
   margin-top: 5px;
   background: rgba(0, 0, 0, 0.5);
   border-radius: 5px;
-  min-width: 155px;
+  min-width: 170px;
   flex-direction: column;
   gap: 5px;
 }
@@ -853,9 +1065,110 @@ onUnmounted(() => {
   margin-right: 4px;
 }
 
+/* 左侧栏样式 */
+.left_sidebar {
+  position: absolute;
+  left: 0;
+  width: 300px;
+  height: 100%;
+  background-color: rgba(30, 0, 100, 0.5);
+}
+
+.left_sidebar h3 {
+  line-height: 45px;
+  text-align: center;
+  padding: 0 20px;
+  font-size: 20px;
+  color: #eee;
+}
+
+.layer-panel {
+  margin: 5px 10px;
+  padding: 5px;
+  background: rgba(0, 0, 30, 0.4);
+  border-radius: 8px;
+}
+.layer-panel h4 {
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  color: #b3c6ff;
+  font-size: 16px;
+  text-align: center;
+}
+.control-group {
+  display: flex;
+  margin: 10px 0;
+  gap: 5px;
+  align-items: center;
+  font-size: 14px;
+  color: #eee;
+}
+.control-group select {
+  padding: 3px 5px;
+  font-size: 14px;
+  border-radius: 5px;
+  border: none;
+}
+.control-group button {
+  padding: 3px 5px;
+  font-size: 14px;
+  border-radius: 5px;
+  background: #309eff;
+  color: #eee;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.control-group button:hover:not(:disabled) {
+  background: #66ccff;
+}
+.control-group button:disabled,
+.control-group select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 右侧边栏样式 */
+.right_sidebar {
+  position: absolute;
+  right: 0;
+  width: 300px;
+  height: 100%;
+  background-color: rgba(30, 0, 100, 0.5);
+}
+
+.right_sidebar h3 {
+  line-height: 45px;
+  text-align: center;
+  padding: 0 20px;
+  font-size: 20px;
+  color: #eee;
+}
+
+.status-info {
+  position: absolute;
+  bottom: 0;
+  width: 300px;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.status-info h4 {
+  padding: 3px 5px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 16px;
+  color: #ccc;
+}
+
+.status-info div {
+  margin: 1px 0;
+  color: #52c41a;
+}
+
+/* 图形要素弹窗样式 */
 .feature-popup {
   position: absolute;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(30, 0, 60, 0.5);
   padding: 5px 30px 5px 5px;
   border-radius: 5px;
 }
@@ -867,19 +1180,21 @@ onUnmounted(() => {
 
 .close-btn {
   position: absolute;
-  right: -25px;
+  top: 3px;
+  right: -23px;
+  width: 18px;
+  height: 18px;
+  background-color: rgba(50, 0, 100, 0.5);
   border-radius: 50%;
   border: none;
-  width: 20px;
-  height: 20px;
   line-height: 1;
   text-align: center;
   font-size: 14px;
-  color: #000;
+  color: #eee;
 }
 
 .close-btn:hover {
-  background: #ccc;
+  background: rgb(50, 0, 100);
 }
 
 .popup-content h4 {
@@ -895,6 +1210,23 @@ onUnmounted(() => {
   color: #eee;
 }
 
+/* 删除图形按钮 */
+.delete-btn {
+  margin-top: 5px;
+  padding: 1px 6px;
+  background: rgba(50, 0, 100, 0.5);
+  font-size: 12px;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.delete-btn:hover {
+  background: rgb(50, 0, 100);
+}
+
+.facility-form,
 .landuse-form {
   position: fixed;
   top: 0;

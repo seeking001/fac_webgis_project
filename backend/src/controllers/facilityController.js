@@ -31,6 +31,101 @@ class FacilityController {
       });
     }
   }
+
+  // 创建公共服务设施
+  static async createFacility(req, res) {
+    try {
+      const { name, type, address, capacity, admin_region, geometry } = req.body;
+
+      if (!name || !type || !geometry) {
+        return res.status(400).json({
+          success: false,
+          message: '缺少必要字段: name, type, geometry'
+        });
+      }
+
+      const newFacility = await FacilityModel.createFacility({
+        name,
+        type,
+        address: address || '',
+        capacity: capacity || 0,
+        admin_region: admin_region || '未知区域',
+        geometry
+      });
+
+      res.status(201).json({
+        success: true,
+        message: '设施创建成功',
+        data: newFacility
+      });
+
+    } catch (error) {
+      console.error('创建失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '创建失败'
+      });
+    }
+  }
+
+  // 更新公共服务设施
+  static async updateFacility(req, res) {
+    try {
+      const { id } = req.params;
+      const { name, type, address, capacity, admin_region, geometry } = req.body;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: '缺少设施ID'
+        });
+      }
+
+      const updatedFacility = await FacilityModel.updateFacility(id, {
+        name,
+        type,
+        address,
+        capacity: capacity || 0,
+        admin_region: admin_region || '未知区域',
+        geometry
+      });
+
+      res.json({
+        success: true,
+        message: '设施更新成功',
+        data: updatedFacility
+      });
+
+    } catch (error) {
+      console.error('更新失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '更新失败'
+      });
+    }
+  }
+
+  // 删除公共服务设施
+  static async deleteFacility(req, res) {
+    try {
+      const { id } = req.params;
+
+      // TODO: 调用模型层删除设施
+      const result = await FacilityModel.deleteFacility(id);
+
+      res.json({
+        success: true,
+        message: '删除成功',
+        data: result
+      });
+    } catch (error) {
+      console.error('删除失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '删除失败'
+      });
+    }
+  }
 }
 
 // 导出FacilityController类,供路由模块使用

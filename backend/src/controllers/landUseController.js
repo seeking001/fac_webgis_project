@@ -107,6 +107,26 @@ class LandUseController {
       });
     }
   }
+
+  // 删除土地利用数据
+  static async deleteLandUse(req, res) {
+    try {
+      const { id } = req.params;
+
+      // 实现删除逻辑
+      await LandUseModel.deleteLandUse(id);
+
+      res.json({
+        success: true,
+        message: '删除成功'
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: '删除失败'
+      });
+    }
+  }
 }
 
 // 导出土地利用数据控制类，供路由模块使用

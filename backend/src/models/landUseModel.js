@@ -95,6 +95,25 @@ class LandUseModel {
       throw error;
     }
   }
+
+  // 删除土地利用数据
+  static async deleteLandUse(id) {
+    const query = `
+      DELETE FROM land_use
+      WHERE id = $1
+      RETURNING id
+    `;
+
+    const params = [id];
+
+    try {
+      const result = await pool.query(query, params);
+      return result.rows[0];
+    } catch (error) {
+      console.error('删除失败:', error);
+      throw error;
+    }
+  }
 }
 
 // 导出LandUseModel类
