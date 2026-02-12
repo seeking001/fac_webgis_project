@@ -1,196 +1,194 @@
 <template>
   <div class="map-wrapper">
-    <div class="map-content">
-      <!-- 地图容器 -->
-      <div ref="mapContainer" class="map-container"></div>
+    <!-- 地图容器 -->
+    <div ref="mapContainer" class="map-container"></div>
 
-      <!-- 底图切换控件 -->
-      <div class="basemap-switcher" @mouseenter="basemapPanelVisible = true" @mouseleave="basemapPanelVisible = false">
-        <button class="basemap-main-btn">
-          {{ getActiveBasemap.name }}
-        </button>
-        
-        <transition name="slide-down">
-          <div class="basemap-panel" v-if="basemapPanelVisible">
-            <div class="basemap-item" v-for="item in basemaps" :key="item.id" 
-                 :class="{ 'active': item.id === activeBasemapId }" 
-                 @click="switchBasemap(item.id)">
-              <div class="thumbnail" :style="{ backgroundColor: getThumbColor(item.id) }">
-                {{ item.name }}
-              </div>
-              <div class="basemap-info">
-                <div class="basemap-name">{{ item.name }}</div>
-                <label class="roadnet-toggle" v-if="item.hasRoadNet">
-                  <input type="checkbox" v-model="item.roadNetVisible" @click.stop @change="toggleRoadNet(item)">
-                  <span>标注/路网</span>
-                </label>
-              </div>
+    <!-- 底图切换控件 -->
+    <div class="basemap-switcher" @mouseenter="basemapPanelVisible = true" @mouseleave="basemapPanelVisible = false">
+      <button class="basemap-main-btn">
+        {{ getActiveBasemap.name }}
+      </button>
+      
+      <transition name="slide-down">
+        <div class="basemap-panel" v-if="basemapPanelVisible">
+          <div class="basemap-item" v-for="item in basemaps" :key="item.id" 
+                :class="{ 'active': item.id === activeBasemapId }" 
+                @click="switchBasemap(item.id)">
+            <div class="thumbnail" :style="{ backgroundColor: getThumbColor(item.id) }">
+              {{ item.name }}
+            </div>
+            <div class="basemap-info">
+              <div class="basemap-name">{{ item.name }}</div>
+              <label class="roadnet-toggle" v-if="item.hasRoadNet">
+                <input type="checkbox" v-model="item.roadNetVisible" @click.stop @change="toggleRoadNet(item)">
+                <span>标注/路网</span>
+              </label>
             </div>
           </div>
-        </transition>
-      </div>
-
-      <!-- 左侧边栏：图形操作 -->
-      <div class="left_sidebar">
-        <h3>图形操作</h3>
-        
-        <div class="layer-panel" v-for="(config, key) in layers" :key="key">
-          <h4>{{ config.name }}</h4>
-          
-          <!-- 1. 加载与显示控制 -->
-          <div class="control-group">
-            <input type="checkbox" v-model="config.visible" @change="toggleLayer(key)">
-            <span>加载显示</span>
-            <select v-model="config.selectedType" @change="onTypeChange(key)" :disabled="!config.visible">
-              <option v-for="type in config.types" :value="type.value">
-                {{ type.label }}
-              </option>
-            </select>
-          </div>
-          
-          <!-- 2. 绘制与编辑 -->
-          <div class="control-group">
-            <button @click="startDrawing(key)" :disabled="!config.visible">绘制添加</button>
-            <button @click="toggleEditMode(key)" 
-                    :class="{ 'active': config.editable }"
-                    :disabled="!config.visible || !config.loaded">
-              {{ config.editable ? '结束编辑' : '编辑图形' }}
-            </button>
-          </div>
         </div>
-      </div>
+      </transition>
+    </div>
 
-      <!-- 右侧边栏：信息显示 -->
-      <div class="right_sidebar">
-        <h3>信息显示</h3>
-        <div class="status-info">
-          <h4>加载状态</h4>
-          <div v-for="(config, key) in layers">
-            <span v-if="config.loaded">
-              ✅ {{ config.name }}: {{ key === 'facilities' ? facilitiesCount : landUseCount }} 个
-            </span>
-            <span v-else>◻️ {{ config.name }}: 未加载</span>
-          </div>
-        </div>
-      </div>
+    <!-- 左侧边栏：图形操作 -->
+    <div class="left_sidebar">
+      <h3>图形操作</h3>
       
-      <!-- 点击要素弹窗 -->
-      <div v-if="selectedFeature && popupPosition" 
-           :style="{left: popupPosition.x + 'px', top: popupPosition.y + 'px'}" 
-           class="feature-popup">
-        <div class="popup-content">
-          <button @click="closePopup" class="close-btn">x</button>
-          <h4>{{ selectedFeature.name }}</h4>
-          
-          <div v-if="selectedFeature.layerType === 'facilities'">
-            <p><strong>类型：</strong>{{ selectedFeature.type }}</p>
-            <p><strong>地址：</strong>{{ selectedFeature.address }}</p>
-            <p><strong>建筑面积：</strong>{{ selectedFeature.capacity }}平方米</p>
-            <p><strong>行政区：</strong>{{ selectedFeature.admin_region }}</p>
-          </div>
-          <div v-else>
-            <p><strong>用地类型：</strong>{{ selectedFeature.type }}</p>
-            <p><strong>用地面积：</strong>{{ selectedFeature.area }}平方米</p>
-            <p><strong>行政区：</strong>{{ selectedFeature.admin_region }}</p>
-          </div>
-          
-          <button v-if="selectedFeature" @click="deleteFeature(selectedFeature.id)" class="delete-btn">
-            删除{{ selectedFeature.layerType === 'facilities' ? '设施' : '用地' }}
+      <div class="layer-panel" v-for="(config, key) in layers" :key="key">
+        <h4>{{ config.name }}</h4>
+        
+        <!-- 1. 加载与显示控制 -->
+        <div class="control-group">
+          <input type="checkbox" v-model="config.visible" @change="toggleLayer(key)">
+          <span>加载显示</span>
+          <select v-model="config.selectedType" @change="onTypeChange(key)" :disabled="!config.visible">
+            <option v-for="type in config.types" :value="type.value">
+              {{ type.label }}
+            </option>
+          </select>
+        </div>
+        
+        <!-- 2. 绘制与编辑 -->
+        <div class="control-group">
+          <button @click="startDrawing(key)" :disabled="!config.visible">绘制添加</button>
+          <button @click="toggleEditMode(key)" 
+                  :class="{ 'active': config.editable }"
+                  :disabled="!config.visible || !config.loaded">
+            {{ config.editable ? '结束编辑' : '编辑图形' }}
           </button>
         </div>
       </div>
+    </div>
 
-      <!-- 公共设施表单弹窗 -->
-      <div v-if="showFacilityForm" class="facility-form">
-        <div class="form-overlay" @click="cancelDraw"></div>
-        <div class="form-content">
-          <h4>添加公共设施</h4>
-          <form @submit.prevent="saveFacilityToDatabase">
-            <div class="form-group">
-              <label>名称：</label>
-              <input v-model="facilityForm.name" required placeholder="例如：龙华中学">
-            </div>
-            <div class="form-group">
-              <label>类型：</label>
-              <select v-model="facilityForm.type" required>
-                <option value="">请选择类型</option>
-                <option value="学校">学校</option>
-                <option value="医院">医院</option>
-                <option value="图书馆">图书馆</option>
-                <option value="体育馆">体育馆</option>
-                <option value="公园">公园</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>地址：</label>
-              <input v-model="facilityForm.address" required placeholder="详细地址">
-            </div>
-            <div class="form-group">
-              <label>建筑面积（平方米）：</label>
-              <input v-model="facilityForm.capacity" type="number" required placeholder="手动输入">
-            </div>
-            <div class="form-group">
-              <label>行政区：</label>
-              <select v-model="facilityForm.admin_region" required>
-                <option value="">请选择区域</option>
-                <option value="福田区">福田区</option>
-                <option value="南山区">南山区</option>
-                <option value="罗湖区">罗湖区</option>
-                <option value="宝安区">宝安区</option>
-                <option value="龙华区">龙华区</option>
-                <option value="光明区">光明区</option>
-              </select>
-            </div>
-            <div class="form-buttons">
-              <button type="button" @click="cancelDraw" class="btn-cancel">取消</button>
-              <button type="submit" class="btn-save">保存</button>
-            </div>
-          </form>
+    <!-- 右侧边栏：信息显示 -->
+    <div class="right_sidebar">
+      <h3>信息显示</h3>
+      <div class="status-info">
+        <h4>加载状态</h4>
+        <div v-for="(config, key) in layers">
+          <span v-if="config.loaded">
+            ✅ {{ config.name }}: {{ key === 'facilities' ? facilitiesCount : landUseCount }} 个
+          </span>
+          <span v-else>◻️ {{ config.name }}: 未加载</span>
         </div>
       </div>
-
-      <!-- 土地利用表单弹窗 -->
-      <div v-if="showLandUseForm" class="landuse-form">
-        <div class="form-overlay" @click="cancelDraw"></div>
-        <div class="form-content">
-          <h4>添加土地利用</h4>
-          <form @submit.prevent="saveLandUseToDatabase">
-            <div class="form-group">
-              <label>名称：</label>
-              <input v-model="landUseForm.name" type="text" placeholder="例如：福田居住区" required>
-            </div>
-            <div class="form-group">
-              <label>用地类型：</label>
-              <select v-model="landUseForm.type" required>
-                <option value="">请选择类型</option>
-                <option value="商业用地">商业用地</option>
-                <option value="居住用地">居住用地</option>
-                <option value="工业用地">工业用地</option>
-                <option value="公园绿地">公园绿地</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>行政区：</label>
-              <select v-model="landUseForm.admin_region" required>
-                <option value="">请选择区域</option>
-                <option value="福田区">福田区</option>
-                <option value="南山区">南山区</option>
-                <option value="罗湖区">罗湖区</option>
-                <option value="宝安区">宝安区</option>
-                <option value="龙华区">龙华区</option>
-                <option value="光明区">光明区</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>用地面积（平方米）：</label>
-              <input v-model="landUseForm.area" type="number" placeholder="手动输入" required>
-            </div>
-            <div class="form-buttons">
-              <button type="button" @click="cancelDraw" class="btn-cancel">取消</button>
-              <button type="submit" class="btn-save">保存</button>
-            </div>
-          </form>
+    </div>
+    
+    <!-- 点击要素弹窗 -->
+    <div v-if="selectedFeature && popupPosition" 
+          :style="{left: popupPosition.x + 'px', top: popupPosition.y + 'px'}" 
+          class="feature-popup">
+      <div class="popup-content">
+        <button @click="closePopup" class="close-btn">x</button>
+        <h4>{{ selectedFeature.name }}</h4>
+        
+        <div v-if="selectedFeature.layerType === 'facilities'">
+          <p><strong>类型：</strong>{{ selectedFeature.type }}</p>
+          <p><strong>地址：</strong>{{ selectedFeature.address }}</p>
+          <p><strong>建筑面积：</strong>{{ selectedFeature.capacity }}平方米</p>
+          <p><strong>行政区：</strong>{{ selectedFeature.admin_region }}</p>
         </div>
+        <div v-else>
+          <p><strong>用地类型：</strong>{{ selectedFeature.type }}</p>
+          <p><strong>用地面积：</strong>{{ selectedFeature.area }}平方米</p>
+          <p><strong>行政区：</strong>{{ selectedFeature.admin_region }}</p>
+        </div>
+        
+        <button v-if="selectedFeature" @click="deleteFeature(selectedFeature.id)" class="delete-btn">
+          删除{{ selectedFeature.layerType === 'facilities' ? '设施' : '用地' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- 公共设施表单弹窗 -->
+    <div v-if="showFacilityForm" class="facility-form">
+      <div class="form-overlay" @click="cancelDraw"></div>
+      <div class="form-content">
+        <h4>添加公共设施</h4>
+        <form @submit.prevent="saveFacilityToDatabase">
+          <div class="form-group">
+            <label>名称：</label>
+            <input v-model="facilityForm.name" required placeholder="例如：龙华中学">
+          </div>
+          <div class="form-group">
+            <label>类型：</label>
+            <select v-model="facilityForm.type" required>
+              <option value="">请选择类型</option>
+              <option value="学校">学校</option>
+              <option value="医院">医院</option>
+              <option value="图书馆">图书馆</option>
+              <option value="体育馆">体育馆</option>
+              <option value="公园">公园</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>地址：</label>
+            <input v-model="facilityForm.address" required placeholder="详细地址">
+          </div>
+          <div class="form-group">
+            <label>建筑面积（平方米）：</label>
+            <input v-model="facilityForm.capacity" type="number" required placeholder="手动输入">
+          </div>
+          <div class="form-group">
+            <label>行政区：</label>
+            <select v-model="facilityForm.admin_region" required>
+              <option value="">请选择区域</option>
+              <option value="福田区">福田区</option>
+              <option value="南山区">南山区</option>
+              <option value="罗湖区">罗湖区</option>
+              <option value="宝安区">宝安区</option>
+              <option value="龙华区">龙华区</option>
+              <option value="光明区">光明区</option>
+            </select>
+          </div>
+          <div class="form-buttons">
+            <button type="button" @click="cancelDraw" class="btn-cancel">取消</button>
+            <button type="submit" class="btn-save">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 土地利用表单弹窗 -->
+    <div v-if="showLandUseForm" class="landuse-form">
+      <div class="form-overlay" @click="cancelDraw"></div>
+      <div class="form-content">
+        <h4>添加土地利用</h4>
+        <form @submit.prevent="saveLandUseToDatabase">
+          <div class="form-group">
+            <label>名称：</label>
+            <input v-model="landUseForm.name" type="text" placeholder="例如：福田居住区" required>
+          </div>
+          <div class="form-group">
+            <label>用地类型：</label>
+            <select v-model="landUseForm.type" required>
+              <option value="">请选择类型</option>
+              <option value="商业用地">商业用地</option>
+              <option value="居住用地">居住用地</option>
+              <option value="工业用地">工业用地</option>
+              <option value="公园绿地">公园绿地</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>行政区：</label>
+            <select v-model="landUseForm.admin_region" required>
+              <option value="">请选择区域</option>
+              <option value="福田区">福田区</option>
+              <option value="南山区">南山区</option>
+              <option value="罗湖区">罗湖区</option>
+              <option value="宝安区">宝安区</option>
+              <option value="龙华区">龙华区</option>
+              <option value="光明区">光明区</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>用地面积（平方米）：</label>
+            <input v-model="landUseForm.area" type="number" placeholder="手动输入" required>
+          </div>
+          <div class="form-buttons">
+            <button type="button" @click="cancelDraw" class="btn-cancel">取消</button>
+            <button type="submit" class="btn-save">保存</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
@@ -881,22 +879,16 @@ onUnmounted(() => {
 
 <style>
 .map-wrapper {
-  width: 100%;
-  overflow: hidden;
-}
-
-.map-content {
   position: relative;
-  width: 100%;
   height: 100vh;
-  overflow: hidden;
 }
 
 .map-container {
   position: absolute;
-  background-color: #e0e0e0;
-  width: 100%;
-  height: 100%;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
 }
 
 /* 地图控件样式 */
