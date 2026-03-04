@@ -217,42 +217,10 @@ import { createFacility, updateFacility, deleteFacility, createLandUse, updateLa
 const mapContainer = ref(null)
 let map = null
 
-// 状态管理
-const selectedFeature = ref(null)
-const popupPosition = ref(null)
-const showFacilityForm = ref(false)
-const showLandUseForm = ref(false)
-const isDrawing = ref(false)
-
-// 表单数据
-const facilityForm = ref({
-  name: '',
-  type: '',
-  address: '',
-  capacity: null,
-  admin_region: ''
-})
-const landUseForm = ref({
-  name: '',
-  type: '',
-  admin_region: '',
-  area: null
-})
-
-// 绘制相关
-let drawFeature = null
-let drawInteraction = null
-let drawLayer = null
-let facilityModify = null
-let landUseModify = null
-
-// Store
-const mapDataStore = useMapDataStore()
-
-// 天地图配置
+// 天地图密钥配置
 const TIANDITU_API_KEY = import.meta.env.VITE_TIANDITU_API_KEY
 
-// 底图配置
+// 地图底图预定义
 const basemaps = ref([
   {
     id: 'vector',
@@ -310,10 +278,43 @@ const basemaps = ref([
   }
 ])
 
+// 默认底图及显示状态
 const activeBasemapId = ref('vector')
 const basemapPanelVisible = ref(false)
 
-// 图层配置
+// 状态管理
+const selectedFeature = ref(null)
+const popupPosition = ref(null)
+const showFacilityForm = ref(false)
+const showLandUseForm = ref(false)
+const isDrawing = ref(false)
+
+// 表单数据
+const facilityForm = ref({
+  name: '',
+  type: '',
+  address: '',
+  capacity: null,
+  admin_region: ''
+})
+const landUseForm = ref({
+  name: '',
+  type: '',
+  admin_region: '',
+  area: null
+})
+
+// 绘制相关
+let drawFeature = null
+let drawInteraction = null
+let drawLayer = null
+let facilityModify = null
+let landUseModify = null
+
+// Store
+const mapDataStore = useMapDataStore()
+
+// 矢量图层配置
 const layers = ref({
   facilities: {
     name: '公共设施',
@@ -378,6 +379,7 @@ const initMap = () => {
     ])
   })
   
+  // 添加要素交互
   setupMapInteractions()
 }
 
