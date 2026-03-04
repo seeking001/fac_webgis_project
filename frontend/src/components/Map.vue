@@ -380,18 +380,21 @@ const initMap = () => {
 
 // ========== 底图操作 ==========
 function switchBasemap(basemapId) {
+  // 基础检查
   if (!map) return
   if (activeBasemapId.value === basemapId) return
   
+  // 特殊处理：三维地图
   if (basemapId === '3d') {
     alert('三维地图功能正在开发中…')
     return
   }
   
-  // 移除所有瓦片图层
+  // 移除旧底图
   const oldLayers = map.getLayers().getArray().filter(layer => layer instanceof TileLayer)
   oldLayers.forEach(layer => map.removeLayer(layer))
-  
+
+  // 配置新底图
   const newBasemap = basemaps.value.find(b => b.id === basemapId)
   
   // 添加新底图
@@ -406,7 +409,7 @@ function switchBasemap(basemapId) {
   map.addLayer(baseLayer)
   newBasemap.layer = baseLayer
   
-  // 添加路网
+  // 添加路网底图
   const roadLayer = new TileLayer({
     source: new XYZ({
       url: newBasemap.roadNetUrl,
@@ -419,6 +422,7 @@ function switchBasemap(basemapId) {
   map.addLayer(roadLayer)
   newBasemap.roadNetLayer = roadLayer
   
+  // 更新当前选中的底图ID
   activeBasemapId.value = basemapId
 }
 
@@ -863,10 +867,8 @@ function cancelDraw() {
 
 // ========== 生命周期 ==========
 onMounted(() => {
-  setTimeout(() => {
-    if (!mapContainer.value) return
-    initMap()
-  }, 300)
+  if (!mapContainer.value) return
+  initMap()
 })
 
 onUnmounted(() => {
