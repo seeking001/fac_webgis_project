@@ -195,7 +195,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed, markRaw } from 'vue'
 import { Map, View } from 'ol'
 import 'ol/ol.css'
 import TileLayer from 'ol/layer/Tile'
@@ -209,7 +209,6 @@ import { Point, Polygon } from 'ol/geom'
 import { FullScreen, ScaleLine, MousePosition, defaults } from "ol/control"
 import { createStringXY } from "ol/coordinate"
 import { Draw, Modify } from 'ol/interaction'
-
 import { useMapDataStore } from '../stores/mapData'
 import { getMapBbox } from '../utils/mapHelpers'
 import { createFacility, updateFacility, deleteFacility, createLandUse, updateLandUse, deleteLandUse } from '../services/api'
@@ -258,31 +257,55 @@ const basemaps = ref([
   {
     id: 'vector',
     name: '普通地图',
-    layer: null,
-    url: `http://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
+    layer: markRaw(new TileLayer({
+      source: new XYZ({
+        url: `http://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
+        wrapX: false,
+        crossOrigin: 'anonymous'
+      }),
+      zIndex: 0
+    })),
     hasRoadNet: true,
     roadNetVisible: false,
-    roadNetUrl: `http://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
-    roadNetLayer: null
+    roadNetLayer: markRaw(new TileLayer({
+      source: new XYZ({
+        url: `http://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
+        wrapX: false,
+        crossOrigin: 'anonymous'
+      }),
+      visible: false,
+      zIndex: 1
+    }))
   },
   {
     id: 'satellite',
     name: '卫星地图',
-    layer: null,
-    url: `http://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
+    layer: markRaw(new TileLayer({
+      source: new XYZ({
+        url: `http://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
+        wrapX: false,
+        crossOrigin: 'anonymous'
+      }),
+      zIndex: 0
+    })),
     hasRoadNet: true,
     roadNetVisible: false,
-    roadNetUrl: `http://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
-    roadNetLayer: null
+    roadNetLayer: markRaw(new TileLayer({
+      source: new XYZ({
+        url: `http://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
+        wrapX: false,
+        crossOrigin: 'anonymous'
+      }),
+      visible: false,
+      zIndex: 1
+    }))
   },
   {
     id: '3d',
     name: '三维地图',
     layer: null,
-    url: null,
     hasRoadNet: false,
     roadNetVisible: false,
-    roadNetUrl: null,
     roadNetLayer: null
   }
 ])
@@ -336,26 +359,9 @@ const getActiveBasemap = computed(() => basemaps.value.find(b => b.id === active
 const initMap = () => {
   if (!mapContainer.value) return
 
-  const initLayer = new TileLayer({
-    source: new XYZ({
-      url: basemaps.value[0].url,
-      wrapX: false,
-      crossOrigin: 'anonymous'
-    })
-  })
-
-  const initRoadLayer = new TileLayer({
-    source: new XYZ({
-      url: basemaps.value[0].roadNetUrl,
-      wrapX: false,
-      crossOrigin: 'anonymous'
-    }),
-    visible: false
-  })
-  
   map = new Map({
     target: mapContainer.value,
-    layers: [initLayer, initRoadLayer],
+    layers: [basemaps.value[0].layer, basemaps.value[0].roadNetLayer],
     view: new View({
       center: fromLonLat([114.04, 22.69]),
       zoom: 12,
@@ -371,9 +377,6 @@ const initMap = () => {
       })
     ])
   })
-  
-  basemaps.value[0].layer = initLayer
-  basemaps.value[0].roadNetLayer = initRoadLayer
   
   setupMapInteractions()
 }
@@ -398,29 +401,8 @@ function switchBasemap(basemapId) {
   const newBasemap = basemaps.value.find(b => b.id === basemapId)
   
   // 添加新底图
-  const baseLayer = new TileLayer({
-    source: new XYZ({
-      url: newBasemap.url,
-      wrapX: false,
-      crossOrigin: 'anonymous'
-    }),
-    zIndex: 0
-  })
-  map.addLayer(baseLayer)
-  newBasemap.layer = baseLayer
-  
-  // 添加路网底图
-  const roadLayer = new TileLayer({
-    source: new XYZ({
-      url: newBasemap.roadNetUrl,
-      wrapX: false,
-      crossOrigin: 'anonymous'
-    }),
-    visible: newBasemap.roadNetVisible,
-    zIndex: 1
-  })
-  map.addLayer(roadLayer)
-  newBasemap.roadNetLayer = roadLayer
+  map.addLayer(newBasemap.layer)
+  map.addLayer(newBasemap.roadNetLayer)
   
   // 更新当前选中的底图ID
   activeBasemapId.value = basemapId
