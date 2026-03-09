@@ -468,15 +468,16 @@ function updateVectorLayer(layerKey) {
     source.addFeature(feature)
   })
 
+  // 移除旧图层
   if (layerObj.layer) map.removeLayer(layerObj.layer)
   
+  // 添加新图层
   layerObj.layer = new VectorLayer({
     source,
     style: styleFunc,
     visible: layerObj.visible,
     zIndex: 2
   })
-  
   map.addLayer(layerObj.layer)
 
   // 设置编辑交互
@@ -493,8 +494,8 @@ function onTypeChange(layerKey) {
 
 // ========== 绘制功能 ==========
 function startDrawing(layerKey) {
-  if (layerKey === 'landUse') landUseDraw()
-  else if (layerKey === 'facilities') facilityDraw()
+  if (layerKey === 'facilities') facilityDraw()
+  else if (layerKey === 'landUse') landUseDraw()
 }
 
 function facilityDraw() {
@@ -566,6 +567,17 @@ function landUseDraw() {
 }
 
 // ========== 编辑功能 ==========
+function toggleEditMode(layerKey) {
+  const layerObj = layers.value[layerKey]
+  if (layerKey === 'facilities' && layerObj.loaded) {
+    layerObj.editable = !layerObj.editable
+    if (facilityModify) facilityModify.setActive(layerObj.editable)
+  } else if (layerKey === 'landUse' && layerObj.loaded) {
+    layerObj.editable = !layerObj.editable
+    if (landUseModify) landUseModify.setActive(layerObj.editable)
+  } 
+}
+
 function setupFacilityModify(source) {
   if (facilityModify) {
     map.removeInteraction(facilityModify)
@@ -618,7 +630,6 @@ function setupLandUseModify(source) {
     try {
       const geometry = modifiedFeature.getGeometry()
       const coords3857 = geometry.getCoordinates()
-      
       const coords4326 = coords3857.map(ring => 
         ring.map(coord => toLonLat(coord))
       )
@@ -645,16 +656,6 @@ function setupLandUseModify(source) {
   landUseModify.setActive(layers.value.landUse.editable)
 }
 
-function toggleEditMode(layerKey) {
-  const layerObj = layers.value[layerKey]
-  if (layerKey === 'landUse' && layerObj.loaded) {
-    layerObj.editable = !layerObj.editable
-    if (landUseModify) landUseModify.setActive(layerObj.editable)
-  } else if (layerKey === 'facilities' && layerObj.loaded) {
-    layerObj.editable = !layerObj.editable
-    if (facilityModify) facilityModify.setActive(layerObj.editable)
-  }
-}
 
 // ========== 数据保存 ==========
 async function saveFacilityToDatabase() {
