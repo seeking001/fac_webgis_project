@@ -438,6 +438,10 @@ async function toggleLayer(layerKey) {
   }
 }
 
+function onTypeChange(layerKey) {
+  if (layers.value[layerKey].loaded) updateVectorLayer(layerKey)
+}
+
 function updateVectorLayer(layerKey) {
   const layerObj = layers.value[layerKey]
   const storeData = layerKey === 'facilities' ? mapDataStore.facilities : mapDataStore.landUse
@@ -488,9 +492,60 @@ function updateVectorLayer(layerKey) {
   }
 }
 
-function onTypeChange(layerKey) {
-  if (layers.value[layerKey].loaded) updateVectorLayer(layerKey)
+
+// ========== 样式函数 ==========
+function createFacilityStyle(feature) {
+  const type = feature.get('type')
+  const icons = {
+    学校: '🎓',
+    医院: '🏥',
+    图书馆: '📖',
+    体育馆: '🏀',
+    公园: '🌳',
+    警察局: '👮',
+    消防站: '🚒',
+    停车场: '🅿️'
+  }
+  const icon = icons[type] || '📍'
+  const name = feature.get('name') || ''
+  
+  return [
+    new Style({
+      text: new Text({
+         text: icon,
+         font: 'bold 16px Arial'
+      })
+    }),
+    new Style({
+      text: new Text({
+        text: name,
+        font: '14px Arial',
+        textAlign: 'left',  // 左对齐
+        offsetX: 12,  // 向右偏移12px
+        textBaseline: 'middle',  // 垂直居中
+        stroke: new Stroke({ color: '#fff', width: 1 })  // 白色描边
+      })
+    })
+  ]
 }
+
+function createLandUseStyle(feature) {
+  const type = feature.get('type')
+  let color = 'rgba(0, 0, 0, 0.6)'
+  
+  switch(type) {
+    case '居住用地': color = 'rgba(255, 255, 45, 0.6)'; break
+    case '商业用地': color = 'rgba(255, 0, 0, 0.6)'; break
+    case '工业用地': color = 'rgba(187, 150, 116, 0.6)'; break
+    case '公园绿地': color = 'rgba(0, 255, 0, 0.6)'; break
+  }
+
+  return new Style({
+    fill: new Fill({ color }),
+    stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.2)', width: 1.5 })
+  })
+}
+
 
 // ========== 绘制功能 ==========
 function startDrawing(layerKey) {
@@ -565,6 +620,7 @@ function landUseDraw() {
 
   map.addInteraction(drawInteraction)
 }
+
 
 // ========== 编辑功能 ==========
 function toggleEditMode(layerKey) {
@@ -740,10 +796,10 @@ async function deleteFeature(featureId) {
   if (!confirm(`确定要删除这个${featureName}吗？`)) return
   
   try {
-    if (layerType === 'landUse') {
-      await deleteLandUse(featureId)
-    } else if (layerType === 'facilities') {
+    if (layerType === 'facilities') {
       await deleteFacility(featureId)
+    } else if (layerType === 'landUse') {
+      await deleteLandUse(featureId)
     }
     
     const source = layers.value[layerType]?.layer?.getSource()
@@ -768,40 +824,6 @@ async function deleteFeature(featureId) {
     if (feature) source.removeFeature(feature)
     closePopup()
   }
-}
-
-// ========== 样式函数 ==========
-function createFacilityStyle(feature) {
-  const type = feature.get('type')
-  const icons = {
-    学校: '🎓',
-    医院: '🏥',
-    图书馆: '📖',
-    体育馆: '🏀',
-    公园: '🌳'
-  }
-  const icon = icons[type] || '📍'
-  
-  return new Style({
-    text: new Text({ text: icon, font: 'bold 18px Arial' })
-  })
-}
-
-function createLandUseStyle(feature) {
-  const type = feature.get('type')
-  let color = 'rgba(0, 0, 0, 0.6)'
-  
-  switch(type) {
-    case '居住用地': color = 'rgba(255, 255, 45, 0.6)'; break
-    case '商业用地': color = 'rgba(255, 0, 0, 0.6)'; break
-    case '工业用地': color = 'rgba(187, 150, 116, 0.6)'; break
-    case '公园绿地': color = 'rgba(0, 255, 0, 0.6)'; break
-  }
-
-  return new Style({
-    fill: new Fill({ color }),
-    stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.2)', width: 1.5 })
-  })
 }
 
 // ========== 交互设置 ==========
