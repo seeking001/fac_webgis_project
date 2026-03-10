@@ -657,14 +657,14 @@ function setupLandUseModify(source) {
 }
 
 
-// ========== 数据保存 ==========
+// ========== 数据表单与属性保存 ==========
+
+// 公共设施数据保存函数
 async function saveFacilityToDatabase() {
   try {
     if (!facilityForm.value.name || !drawFeature) return
     
-    const coords = toLonLat(drawFeature.getGeometry().getCoordinates())
-    
-    const facilityData = {
+    const response = await createFacility({
       name: facilityForm.value.name,
       type: facilityForm.value.type,
       address: facilityForm.value.address,
@@ -672,11 +672,9 @@ async function saveFacilityToDatabase() {
       admin_region: facilityForm.value.admin_region,
       geometry: {
         type: 'Point',
-        coordinates: coords
+        coordinates: toLonLat(drawFeature.getGeometry().getCoordinates())
       }
-    }
-    
-    const response = await createFacility(facilityData)
+    })
     
     if (response.success) {
       drawFeature.set('id', response.data.id)
@@ -698,6 +696,7 @@ async function saveFacilityToDatabase() {
   }
 }
 
+// 土地利用数据保存函数
 async function saveLandUseToDatabase() {
   try {
     if (!landUseForm.value.name || !drawFeature) return

@@ -41,16 +41,6 @@ export async function getFacilities(bbox = null) {
   return request(url);
 }
 
-// 获取土地利用api
-export async function getLandUse(bbox = null) {
-  let url = '/landUse';
-  if (bbox && bbox.length === 4) {
-    const [minLng, minLat, maxLng, maxLat] = bbox;
-    url += `?bbox=${minLng},${minLat},${maxLng},${maxLat}`;
-  }
-  return request(url);
-}
-
 // 创建公共设施
 export async function createFacility(facilityData) {
   return request('/facilities', {
@@ -72,6 +62,17 @@ export async function deleteFacility(id) {
   return request(`/facilities/${id}`, {
     method: 'DELETE'
   });
+}
+
+
+// 获取土地利用api
+export async function getLandUse(bbox = null) {
+  let url = '/landUse';
+  if (bbox && bbox.length === 4) {
+    const [minLng, minLat, maxLng, maxLat] = bbox;
+    url += `?bbox=${minLng},${minLat},${maxLng},${maxLat}`;
+  }
+  return request(url);
 }
 
 // 创建土地利用数据
