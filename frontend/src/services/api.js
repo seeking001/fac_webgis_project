@@ -28,8 +28,8 @@ async function request(url, options = {}) {
 }
 
 // 获取公共服务设施api
-export async function getFacilities(bbox = null) {
-  let url = '/facilities';  // 默认的API路径，与app.js中app.use('/api/facilities', facilitiesRoutes);保持一致
+export async function getPoints(bbox = null) {
+  let url = '/points';  // 默认的API路径，与app.js中app.use('/api/points', pointsRoutes);保持一致
 
   // 如果提供了边界框,就添加到URL参数中
   if (bbox && bbox.length === 4) {
@@ -42,32 +42,32 @@ export async function getFacilities(bbox = null) {
 }
 
 // 创建公共设施
-export async function createFacility(facilityData) {
-  return request('/facilities', {
+export async function createPoints(pointData) {
+  return request('/points', {
     method: 'POST',
-    body: JSON.stringify(facilityData)
+    body: JSON.stringify(pointData)
   });
 }
 
 // 更新公共设施
-export async function updateFacility(id, facilityData) {
-  return request(`/facilities/${id}`, {
+export async function updatePoints(id, pointData) {
+  return request(`/points/${id}`, {
     method: 'PUT',
-    body: JSON.stringify(facilityData)
+    body: JSON.stringify(pointData)
   });
 }
 
 // 删除公共设施
-export async function deleteFacility(id) {
-  return request(`/facilities/${id}`, {
+export async function deletePoints(id) {
+  return request(`/points/${id}`, {
     method: 'DELETE'
   });
 }
 
 
 // 获取土地利用api
-export async function getLandUse(bbox = null) {
-  let url = '/landUse';
+export async function getLands(bbox = null) {
+  let url = '/lands';
   if (bbox && bbox.length === 4) {
     const [minLng, minLat, maxLng, maxLat] = bbox;
     url += `?bbox=${minLng},${minLat},${maxLng},${maxLat}`;
@@ -76,24 +76,24 @@ export async function getLandUse(bbox = null) {
 }
 
 // 创建土地利用数据
-export async function createLandUse(landUseData) {
-  return request('/landUse', {
+export async function createLands(landsData) {
+  return request('/lands', {
     method: 'POST',
-    body: JSON.stringify(landUseData)
+    body: JSON.stringify(landsData)
   });
 }
 
 // 更新土地利用数据
-export async function updateLandUse(id, landUseData) {
-  return request(`/landUse/${id}`, {
+export async function updateLands(id, landsData) {
+  return request(`/lands/${id}`, {
     method: 'PUT',
-    body: JSON.stringify(landUseData)
+    body: JSON.stringify(landsData)
   });
 }
 
 // 删除图形
-export async function deleteLandUse(id) {
-  return request(`/landUse/${id}`, {
+export async function deleteLands(id) {
+  return request(`/lands/${id}`, {
     method: 'DELETE'
   });
 }

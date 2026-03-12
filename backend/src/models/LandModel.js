@@ -2,9 +2,9 @@
 const { pool } = require('../config/database');
 
 // 定义数据模型层
-class LandUseModel {
+class landModel {
   // 获取土地利用数据
-  static async getAllLandUse(bbox = null) {
+  static async getAllLands(bbox = null) {
     let sql = `
       SELECT
         id,
@@ -14,7 +14,7 @@ class LandUseModel {
         area,
         admin_region,
         created_at
-      FROM land_use
+      FROM lands
     `;
 
     const params = [];
@@ -36,11 +36,11 @@ class LandUseModel {
   }
 
   // 添加土地利用数据
-  static async createLandUse(data) {
+  static async createLands(data) {
     const { name, type, area, admin_region, geometry } = data;
 
     const query = `
-      INSERT INTO land_use (name, type, area, admin_region, geom)
+      INSERT INTO lands (name, type, area, admin_region, geom)
       VALUES ($1, $2, $3, $4, ST_SetSRID(ST_GeomFromGeoJSON($5), 4326))
       RETURNING id, name, type, area, admin_region, ST_AsGeoJSON(geom) as geometry, created_at
     `;
@@ -62,11 +62,11 @@ class LandUseModel {
   }
 
   // 更新土地利用数据
-  static async updateLandUse(id, data) {
+  static async updateLands(id, data) {
     const { name, type, area, admin_region, geometry } = data;
 
     const query = `
-      UPDATE land_use
+      UPDATE lands
       SET
         name = $1,
         type = $2,
@@ -97,9 +97,9 @@ class LandUseModel {
   }
 
   // 删除土地利用数据
-  static async deleteLandUse(id) {
+  static async deleteLands(id) {
     const query = `
-      DELETE FROM land_use
+      DELETE FROM lands
       WHERE id = $1
       RETURNING id
     `;
@@ -116,5 +116,5 @@ class LandUseModel {
   }
 }
 
-// 导出LandUseModel类
-module.exports = LandUseModel;
+// 导出landModel类
+module.exports = landModel;

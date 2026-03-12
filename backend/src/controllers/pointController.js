@@ -1,8 +1,8 @@
 // 引入数据模型
-const FacilityModel = require('../models/facilityModel');
+const PointModel = require('../models/PointModel');
 
-class FacilityController {
-  static async getFacilities(req, res) {
+class PointController {
+  static async getPoints(req, res) {
     // 从请求查询参数中获取边界框参数
     try {
       const { bbox } = req.query;
@@ -15,13 +15,13 @@ class FacilityController {
       }
 
       // 调用数据模型层获取设施数据
-      const facilities = await FacilityModel.getAllFacilities(bboxArray);
+      const points = await PointModel.getAllPoints(bboxArray);
 
       // 返回标准化的成功响应
       res.json({
         success: true,
-        count: facilities.length,
-        data: facilities
+        count: points.length,
+        data: points
       });
     } catch (error) {
       // 处理错误并返回标准错误响应
@@ -33,7 +33,7 @@ class FacilityController {
   }
 
   // 创建公共服务设施
-  static async createFacility(req, res) {
+  static async createPoints(req, res) {
     try {
       const { name, type, address, capacity, admin_region, geometry } = req.body;
 
@@ -44,7 +44,7 @@ class FacilityController {
         });
       }
 
-      const newFacility = await FacilityModel.createFacility({
+      const newPoint = await PointModel.createPoints({
         name,
         type,
         address: address || '',
@@ -56,7 +56,7 @@ class FacilityController {
       res.status(201).json({
         success: true,
         message: '设施创建成功',
-        data: newFacility
+        data: newPoint
       });
 
     } catch (error) {
@@ -69,7 +69,7 @@ class FacilityController {
   }
 
   // 更新公共服务设施
-  static async updateFacility(req, res) {
+  static async updatePoints(req, res) {
     try {
       const { id } = req.params;
       const { name, type, address, capacity, admin_region, geometry } = req.body;
@@ -81,7 +81,7 @@ class FacilityController {
         });
       }
 
-      const updatedFacility = await FacilityModel.updateFacility(id, {
+      const updatedPoints = await PointModel.updatePoints(id, {
         name,
         type,
         address,
@@ -93,7 +93,7 @@ class FacilityController {
       res.json({
         success: true,
         message: '设施更新成功',
-        data: updatedFacility
+        data: updatedPoints
       });
 
     } catch (error) {
@@ -106,12 +106,12 @@ class FacilityController {
   }
 
   // 删除公共服务设施
-  static async deleteFacility(req, res) {
+  static async deletePoints(req, res) {
     try {
       const { id } = req.params;
 
       // TODO: 调用模型层删除设施
-      const result = await FacilityModel.deleteFacility(id);
+      const result = await PointModel.deletePoints(id);
 
       res.json({
         success: true,
@@ -128,5 +128,5 @@ class FacilityController {
   }
 }
 
-// 导出FacilityController类,供路由模块使用
-module.exports = FacilityController;
+// 导出PointController类,供路由模块使用
+module.exports = PointController;

@@ -5,8 +5,8 @@ require('dotenv').config();  // 加载环境变量
 
 // 引入数据库连接测试和路由模块
 const { testConnection } = require('./config/database');
-const facilityRoutes = require('./routes/facilityRouter');
-const landUseRoutes = require('./routes/landUseRouter');
+const pointRoutes = require('./routes/pointRouter');
+const landRoutes = require('./routes/landRouter');
 
 // 创建express应用实例
 const app = express();
@@ -23,9 +23,9 @@ app.use(express.json());
 
 // 配置路由
 // 公共服务设施路由
-app.use('/api/facilities', facilityRoutes);
+app.use('/api/points', pointRoutes);
 // 土地利用路由
-app.use('/api/landUse', landUseRoutes);
+app.use('/api/lands', landRoutes);
 
 // 创建服务器启动函数
 const startServer = async () => {

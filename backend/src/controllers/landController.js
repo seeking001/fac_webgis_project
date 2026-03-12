@@ -1,9 +1,9 @@
 // 引入数据模型
-const LandUseModel = require('../models/landUseModel');
+const landModel = require('../models/LandModel');
 
 // 创建土地利用数据控制类
-class LandUseController {
-  static async getLandUse(req, res) {
+class landController {
+  static async getLands(req, res) {
     // 从请求查询参数中获取边界框参数
     try {
       const { bbox } = req.query;
@@ -16,13 +16,13 @@ class LandUseController {
       }
 
       // 调用数据模型层获取设施数据
-      const landUse = await LandUseModel.getAllLandUse(bboxArray);
+      const lands = await landModel.getAllLands(bboxArray);
 
       // 返回标准化的成功响应
       res.json({
         success: true,
-        count: landUse.length,
-        data: landUse
+        count: lands.length,
+        data: lands
       });
     } catch (error) {
       // 处理错误并返回标准错误响应
@@ -34,7 +34,7 @@ class LandUseController {
   }
 
   // 创建土地利用数据
-  static async createLandUse(req, res) {
+  static async createLands(req, res) {
     try {
       const { name, type, area, admin_region, geometry } = req.body;
 
@@ -47,7 +47,7 @@ class LandUseController {
       }
 
       // 调用模型层插入数据
-      const newLandUse = await LandUseModel.createLandUse({
+      const newLand = await landModel.createLands({
         name,
         type,
         area: area || 0,
@@ -59,7 +59,7 @@ class LandUseController {
       res.status(201).json({
         success: true,
         message: '土地利用数据创建成功',
-        data: newLandUse
+        data: newLand
       });
     } catch (error) {
       console.error('创建土地利用数据失败:', error);
@@ -71,7 +71,7 @@ class LandUseController {
   }
 
   // 更新土地利用数据
-  static async updateLandUse(req, res) {
+  static async updateLands(req, res) {
     try {
       const { id } = req.params;
       const { name, type, area, admin_region, geometry } = req.body;
@@ -85,7 +85,7 @@ class LandUseController {
       }
 
       // 调用模型层更新数据
-      const updatedLandUse = await LandUseModel.updateLandUse(id, {
+      const updatedLands = await landModel.updateLands(id, {
         name,
         type,
         area: area || 0,
@@ -97,7 +97,7 @@ class LandUseController {
       res.json({
         success: true,
         message: '土地利用数据更新成功',
-        data: updatedLandUse
+        data: updatedLands
       });
     } catch (error) {
       console.error('更新土地利用数据失败:', error);
@@ -109,12 +109,12 @@ class LandUseController {
   }
 
   // 删除土地利用数据
-  static async deleteLandUse(req, res) {
+  static async deleteLands(req, res) {
     try {
       const { id } = req.params;
 
       // 实现删除逻辑
-      await LandUseModel.deleteLandUse(id);
+      await landModel.deleteLands(id);
 
       res.json({
         success: true,
@@ -130,4 +130,4 @@ class LandUseController {
 }
 
 // 导出土地利用数据控制类，供路由模块使用
-module.exports = LandUseController;
+module.exports = landController;

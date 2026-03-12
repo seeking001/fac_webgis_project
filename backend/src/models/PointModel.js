@@ -2,9 +2,9 @@
 const { pool } = require('../config/database');
 
 // 定义数据模型层
-class FacilityModel {
+class PointModel {
   // 获取公共服务设施
-  static async getAllFacilities(bbox = null) {
+  static async getAllPoints(bbox = null) {
     let query = `
       SELECT
         id,
@@ -15,7 +15,7 @@ class FacilityModel {
         capacity,
         admin_region,
         created_at
-      FROM public_facilities
+      FROM points
     `;
 
     const params = [];
@@ -37,11 +37,11 @@ class FacilityModel {
   }
 
   // 创建公共服务设施
-  static async createFacility(data) {
+  static async createPoints(data) {
     const { name, type, address, capacity, admin_region, geometry } = data;
 
     const query = `
-    INSERT INTO public_facilities 
+    INSERT INTO points 
       (name, type, address, capacity, admin_region, geom)
     VALUES ($1, $2, $3, $4, $5, ST_SetSRID(ST_GeomFromGeoJSON($6), 4326))
     RETURNING 
@@ -73,11 +73,11 @@ class FacilityModel {
   }
 
   // 更新公共服务设施
-  static async updateFacility(id, data) {
+  static async updatePoints(id, data) {
     const { name, type, address, capacity, admin_region, geometry } = data;
 
     const query = `
-    UPDATE public_facilities
+    UPDATE points
     SET
       name = COALESCE($1, name),
       type = COALESCE($2, type),
@@ -119,9 +119,9 @@ class FacilityModel {
   }
 
   // 删除公共服务设施
-  static async deleteFacility(id) {
+  static async deletePoints(id) {
     const query = `
-    DELETE FROM public_facilities
+    DELETE FROM points
     WHERE id = $1
     RETURNING id
   `;
@@ -138,5 +138,5 @@ class FacilityModel {
   }
 }
 
-// 导出FacilityModel类
-module.exports = FacilityModel;
+// 导出PointModel类
+module.exports = PointModel;

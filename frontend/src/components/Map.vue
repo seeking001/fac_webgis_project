@@ -66,7 +66,7 @@
         <h4>加载状态</h4>
         <div v-for="(config, key) in layers">
           <span v-if="config.loaded">
-            ✅ {{ config.name }}: {{ key === 'facilities' ? facilitiesCount : landUseCount }} 个
+            ✅ {{ config.name }}: {{ key === 'points' ? pointsCount : landsCount }} 个
           </span>
           <span v-else>◻️ {{ config.name }}: 未加载</span>
         </div>
@@ -81,7 +81,7 @@
         <button @click="closePopup" class="close-btn">x</button>
         <h4>{{ selectedFeature.name }}</h4>
         
-        <div v-if="selectedFeature.layerType === 'facilities'">
+        <div v-if="selectedFeature.layerType === 'points'">
           <p><strong>类型：</strong>{{ selectedFeature.type }}</p>
           <p><strong>地址：</strong>{{ selectedFeature.address }}</p>
           <p><strong>建筑面积：</strong>{{ selectedFeature.capacity }}平方米</p>
@@ -94,24 +94,24 @@
         </div>
         
         <button v-if="selectedFeature" @click="deleteFeature(selectedFeature.id)" class="delete-btn">
-          删除{{ selectedFeature.layerType === 'facilities' ? '设施' : '用地' }}
+          删除{{ selectedFeature.layerType === 'points' ? '设施' : '用地' }}
         </button>
       </div>
     </div>
 
     <!-- 公共设施表单弹窗 -->
-    <div v-if="showFacilityForm" class="facility-form">
+    <div v-if="showPointForm" class="point-form">
       <div class="form-overlay" @click="cancelDraw"></div>
       <div class="form-content">
         <h4>添加公共设施</h4>
-        <form @submit.prevent="saveFacilityToDatabase">
+        <form @submit.prevent="savePointToDatabase">
           <div class="form-group">
             <label>名称：</label>
-            <input v-model="facilityForm.name" required placeholder="例如：龙华中学">
+            <input v-model="pointsForm.name" required placeholder="例如：龙华中学">
           </div>
           <div class="form-group">
             <label>类型：</label>
-            <select v-model="facilityForm.type" required>
+            <select v-model="pointsForm.type" required>
               <option value="">请选择类型</option>
               <option value="学校">学校</option>
               <option value="医院">医院</option>
@@ -122,15 +122,15 @@
           </div>
           <div class="form-group">
             <label>地址：</label>
-            <input v-model="facilityForm.address" required placeholder="详细地址">
+            <input v-model="pointsForm.address" required placeholder="详细地址">
           </div>
           <div class="form-group">
             <label>建筑面积（平方米）：</label>
-            <input v-model="facilityForm.capacity" type="number" required placeholder="手动输入">
+            <input v-model="pointsForm.capacity" type="number" required placeholder="手动输入">
           </div>
           <div class="form-group">
             <label>行政区：</label>
-            <select v-model="facilityForm.admin_region" required>
+            <select v-model="pointsForm.admin_region" required>
               <option value="">请选择区域</option>
               <option value="福田区">福田区</option>
               <option value="南山区">南山区</option>
@@ -149,18 +149,18 @@
     </div>
 
     <!-- 土地利用表单弹窗 -->
-    <div v-if="showLandUseForm" class="landuse-form">
+    <div v-if="showLandsForm" class="lands-form">
       <div class="form-overlay" @click="cancelDraw"></div>
       <div class="form-content">
         <h4>添加土地利用</h4>
-        <form @submit.prevent="saveLandUseToDatabase">
+        <form @submit.prevent="saveLandsToDatabase">
           <div class="form-group">
             <label>名称：</label>
-            <input v-model="landUseForm.name" type="text" placeholder="例如：福田居住区" required>
+            <input v-model="landsForm.name" type="text" placeholder="例如：福田居住区" required>
           </div>
           <div class="form-group">
             <label>用地类型：</label>
-            <select v-model="landUseForm.type" required>
+            <select v-model="landsForm.type" required>
               <option value="">请选择类型</option>
               <option value="商业用地">商业用地</option>
               <option value="居住用地">居住用地</option>
@@ -170,7 +170,7 @@
           </div>
           <div class="form-group">
             <label>行政区：</label>
-            <select v-model="landUseForm.admin_region" required>
+            <select v-model="landsForm.admin_region" required>
               <option value="">请选择区域</option>
               <option value="福田区">福田区</option>
               <option value="南山区">南山区</option>
@@ -182,7 +182,7 @@
           </div>
           <div class="form-group">
             <label>用地面积（平方米）：</label>
-            <input v-model="landUseForm.area" type="number" placeholder="手动输入" required>
+            <input v-model="landsForm.area" type="number" placeholder="手动输入" required>
           </div>
           <div class="form-buttons">
             <button type="button" @click="cancelDraw" class="btn-cancel">取消</button>
@@ -209,9 +209,9 @@ import { Point, Polygon } from 'ol/geom'
 import { FullScreen, ScaleLine, MousePosition, defaults } from "ol/control"
 import { createStringXY } from "ol/coordinate"
 import { Draw, Modify } from 'ol/interaction'
-import { useMapDataStore } from '../stores/mapData'
-import { getMapBbox } from '../utils/mapHelpers'
-import { createFacility, updateFacility, deleteFacility, createLandUse, updateLandUse, deleteLandUse } from '../services/api'
+import { useVectorStore } from '../stores/vectorStore'
+import { getMapBbox } from '../utils/mapUtil'
+import { createPoints, updatePoints, deletePoints, createLands, updateLands, deleteLands } from '../services/api'
 
 // DOM 引用
 const mapContainer = ref(null)
@@ -285,19 +285,19 @@ const basemapPanelVisible = ref(false)
 // 状态管理
 const selectedFeature = ref(null)
 const popupPosition = ref(null)
-const showFacilityForm = ref(false)
-const showLandUseForm = ref(false)
+const showPointForm = ref(false)
+const showLandsForm = ref(false)
 const isDrawing = ref(false)
 
 // 表单数据
-const facilityForm = ref({
+const pointsForm = ref({
   name: '',
   type: '',
   address: '',
   capacity: null,
   admin_region: ''
 })
-const landUseForm = ref({
+const landsForm = ref({
   name: '',
   type: '',
   admin_region: '',
@@ -308,16 +308,16 @@ const landUseForm = ref({
 let drawFeature = null
 let drawInteraction = null
 let drawLayer = null
-let facilityModify = null
-let landUseModify = null
+let pointModify = null
+let landsModify = null
 
 // Store
-const mapDataStore = useMapDataStore()
+const vectorStore = useVectorStore()
 
 // 矢量图层配置
 const layers = ref({
-  facilities: {
-    name: '公共设施',
+  points: {
+    name: '设施点',
     visible: false,
     loaded: false,
     layer: null,
@@ -333,8 +333,8 @@ const layers = ref({
       { label: '公园', value: '公园' }
     ]
   },
-  landUse: {
-    name: '土地利用',
+  lands: {
+    name: '设施用地',
     visible: false,
     loaded: false,
     layer: null,
@@ -352,8 +352,8 @@ const layers = ref({
 })
 
 // 计算属性
-const facilitiesCount = computed(() => mapDataStore.facilities.length)
-const landUseCount = computed(() => mapDataStore.landUse.length)
+const pointsCount = computed(() => vectorStore.points.length)
+const landsCount = computed(() => vectorStore.lands.length)
 const getActiveBasemap = computed(() => basemaps.value.find(b => b.id === activeBasemapId.value))
 
 // ========== 地图初始化 ==========
@@ -426,10 +426,10 @@ async function toggleLayer(layerKey) {
   const layerObj = layers.value[layerKey]
   if (layerObj.visible && !layerObj.loaded) {
     const bbox = getMapBbox(map)
-    if (layerKey === 'facilities') {
-      await mapDataStore.loadFacilities(bbox)
+    if (layerKey === 'points') {
+      await vectorStore.loadPoints(bbox)
     } else {
-      await mapDataStore.loadLandUse(bbox)
+      await vectorStore.loadLands(bbox)
     }
     layerObj.loaded = true
     updateVectorLayer(layerKey)
@@ -444,9 +444,9 @@ function onTypeChange(layerKey) {
 
 function updateVectorLayer(layerKey) {
   const layerObj = layers.value[layerKey]
-  const storeData = layerKey === 'facilities' ? mapDataStore.facilities : mapDataStore.landUse
-  const styleFunc = layerKey === 'facilities' ? createFacilityStyle : createLandUseStyle
-  const isPoint = layerKey === 'facilities'
+  const storeData = layerKey === 'points' ? vectorStore.points : vectorStore.lands
+  const styleFunc = layerKey === 'points' ? createPointsStyle : createLandsStyle
+  const isPoint = layerKey === 'points'
 
   const filteredData = layerObj.selectedType === 'all' 
     ? storeData 
@@ -485,16 +485,16 @@ function updateVectorLayer(layerKey) {
   map.addLayer(layerObj.layer)
 
   // 设置编辑交互
-  if (layerKey === 'facilities') {
-    setupFacilityModify(source)
-  } else if (layerKey === 'landUse') {
-    setupLandUseModify(source)
+  if (layerKey === 'points') {
+    setupPointModify(source)
+  } else if (layerKey === 'lands') {
+    setupLandsModify(source)
   }
 }
 
 
 // ========== 样式函数 ==========
-function createFacilityStyle(feature) {
+function createPointsStyle(feature) {
   const type = feature.get('type')
   const icons = {
     学校: '🎓',
@@ -529,7 +529,7 @@ function createFacilityStyle(feature) {
   ]
 }
 
-function createLandUseStyle(feature) {
+function createLandsStyle(feature) {
   const type = feature.get('type')
   let color = 'rgba(0, 0, 0, 0.6)'
   
@@ -549,11 +549,11 @@ function createLandUseStyle(feature) {
 
 // ========== 绘制功能 ==========
 function startDrawing(layerKey) {
-  if (layerKey === 'facilities') facilityDraw()
-  else if (layerKey === 'landUse') landUseDraw()
+  if (layerKey === 'points') pointDraw()
+  else if (layerKey === 'lands') landsDraw()
 }
 
-function facilityDraw() {
+function pointDraw() {
   if (drawInteraction) map.removeInteraction(drawInteraction)
   
   isDrawing.value = true
@@ -583,13 +583,13 @@ function facilityDraw() {
 
   drawInteraction.on('drawend', (event) => {
     drawFeature = event.feature
-    showFacilityForm.value = true
+    showPointForm.value = true
   })
 
   map.addInteraction(drawInteraction)
 }
 
-function landUseDraw() {
+function landsDraw() {
   if (drawInteraction) map.removeInteraction(drawInteraction)
   
   isDrawing.value = true
@@ -615,7 +615,7 @@ function landUseDraw() {
 
   drawInteraction.on('drawend', (event) => {
     drawFeature = event.feature
-    showLandUseForm.value = true
+    showLandsForm.value = true
   })
 
   map.addInteraction(drawInteraction)
@@ -625,24 +625,24 @@ function landUseDraw() {
 // ========== 编辑功能 ==========
 function toggleEditMode(layerKey) {
   const layerObj = layers.value[layerKey]
-  if (layerKey === 'facilities' && layerObj.loaded) {
+  if (layerKey === 'points' && layerObj.loaded) {
     layerObj.editable = !layerObj.editable
-    if (facilityModify) facilityModify.setActive(layerObj.editable)
-  } else if (layerKey === 'landUse' && layerObj.loaded) {
+    if (pointModify) pointModify.setActive(layerObj.editable)
+  } else if (layerKey === 'lands' && layerObj.loaded) {
     layerObj.editable = !layerObj.editable
-    if (landUseModify) landUseModify.setActive(layerObj.editable)
+    if (landsModify) landsModify.setActive(layerObj.editable)
   } 
 }
 
-function setupFacilityModify(source) {
-  if (facilityModify) {
-    map.removeInteraction(facilityModify)
-    facilityModify = null
+function setupPointModify(source) {
+  if (pointModify) {
+    map.removeInteraction(pointModify)
+    pointModify = null
   }
   
-  facilityModify = new Modify({ source })
+  pointModify = new Modify({ source })
   
-  facilityModify.on('modifyend', async (event) => {
+  pointModify.on('modifyend', async (event) => {
     const modifiedFeature = event.features.item(0)
     const id = modifiedFeature.get('id')
     
@@ -660,26 +660,26 @@ function setupFacilityModify(source) {
         }
       }
       
-      await updateFacility(id, updateData)
+      await updatePoints(id, updateData)
       console.log('✅ 设施位置已保存')
     } catch (error) {
       console.log('保存失败', error)
     }
   })
   
-  map.addInteraction(facilityModify)
-  facilityModify.setActive(layers.value.facilities.editable || false)
+  map.addInteraction(pointModify)
+  pointModify.setActive(layers.value.points.editable || false)
 }
 
-function setupLandUseModify(source) {
-  if (landUseModify) {
-    map.removeInteraction(landUseModify)
-    landUseModify = null
+function setupLandsModify(source) {
+  if (landsModify) {
+    map.removeInteraction(landsModify)
+    landsModify = null
   }
   
-  landUseModify = new Modify({ source })
+  landsModify = new Modify({ source })
   
-  landUseModify.on('modifyend', async (event) => {
+  landsModify.on('modifyend', async (event) => {
     const modifiedFeature = event.features.item(0)
     const id = modifiedFeature.get('id')
 
@@ -701,31 +701,31 @@ function setupLandUseModify(source) {
         }
       }
     
-      await updateLandUse(id, updateData)
+      await updateLands(id, updateData)
       console.log('✅ 保存成功')
     } catch (error) {
       console.log('保存失败', error)
     }
   })
   
-  map.addInteraction(landUseModify)
-  landUseModify.setActive(layers.value.landUse.editable)
+  map.addInteraction(landsModify)
+  landsModify.setActive(layers.value.lands.editable)
 }
 
 
 // ========== 数据表单与属性保存 ==========
 
 // 公共设施数据保存函数
-async function saveFacilityToDatabase() {
+async function savePointToDatabase() {
   try {
-    if (!facilityForm.value.name || !drawFeature) return
+    if (!pointsForm.value.name || !drawFeature) return
     
-    const response = await createFacility({
-      name: facilityForm.value.name,
-      type: facilityForm.value.type,
-      address: facilityForm.value.address,
-      capacity: facilityForm.value.capacity || 0,
-      admin_region: facilityForm.value.admin_region,
+    const response = await createPoints({
+      name: pointsForm.value.name,
+      type: pointsForm.value.type,
+      address: pointsForm.value.address,
+      capacity: pointsForm.value.capacity || 0,
+      admin_region: pointsForm.value.admin_region,
       geometry: {
         type: 'Point',
         coordinates: toLonLat(drawFeature.getGeometry().getCoordinates())
@@ -734,15 +734,15 @@ async function saveFacilityToDatabase() {
     
     if (response.success) {
       drawFeature.set('id', response.data.id)
-      drawFeature.set('name', facilityForm.value.name)
-      drawFeature.set('type', facilityForm.value.type)
-      drawFeature.set('address', facilityForm.value.address)
-      drawFeature.set('capacity', facilityForm.value.capacity || 0)
-      drawFeature.set('admin_region', facilityForm.value.admin_region)
-      drawFeature.set('layerType', 'facilities')
+      drawFeature.set('name', pointsForm.value.name)
+      drawFeature.set('type', pointsForm.value.type)
+      drawFeature.set('address', pointsForm.value.address)
+      drawFeature.set('capacity', pointsForm.value.capacity || 0)
+      drawFeature.set('admin_region', pointsForm.value.admin_region)
+      drawFeature.set('layerType', 'points')
       
-      layers.value.facilities.layer?.getSource()?.addFeature(drawFeature)
-      mapDataStore.facilities.push(response.data)
+      layers.value.points.layer?.getSource()?.addFeature(drawFeature)
+      vectorStore.points.push(response.data)
       alert('保存成功！')
       cancelDraw()
     }
@@ -753,32 +753,32 @@ async function saveFacilityToDatabase() {
 }
 
 // 土地利用数据保存函数
-async function saveLandUseToDatabase() {
+async function saveLandsToDatabase() {
   try {
-    if (!landUseForm.value.name || !drawFeature) return
+    if (!landsForm.value.name || !drawFeature) return
     
-    const response = await createLandUse({
-      name: landUseForm.value.name,
-      type: landUseForm.value.type,
+    const response = await createLands({
+      name: landsForm.value.name,
+      type: landsForm.value.type,
       geometry: {
         type: 'Polygon',
         coordinates: drawFeature.getGeometry().getCoordinates().map(ring => 
           ring.map(coord => toLonLat(coord))
         )
       },
-      area: landUseForm.value.area || 0,
-      admin_region: landUseForm.value.admin_region || '福田区'
+      area: landsForm.value.area || 0,
+      admin_region: landsForm.value.admin_region || '福田区'
     })
     
     if (response.success) {
       drawFeature.set('id', response.data.id)
-      drawFeature.set('name', landUseForm.value.name)
-      drawFeature.set('type', landUseForm.value.type)
-      drawFeature.set('admin_region', landUseForm.value.admin_region)
-      drawFeature.set('area', landUseForm.value.area || 0)
-      drawFeature.set('layerType', 'landUse')
+      drawFeature.set('name', landsForm.value.name)
+      drawFeature.set('type', landsForm.value.type)
+      drawFeature.set('admin_region', landsForm.value.admin_region)
+      drawFeature.set('area', landsForm.value.area || 0)
+      drawFeature.set('layerType', 'lands')
       
-      layers.value.landUse.layer?.getSource()?.addFeature(drawFeature)
+      layers.value.lands.layer?.getSource()?.addFeature(drawFeature)
       alert('保存成功！')
       cancelDraw()
     }
@@ -792,24 +792,24 @@ async function deleteFeature(featureId) {
   if (!selectedFeature.value) return
   
   const layerType = selectedFeature.value.layerType
-  const featureName = layerType === 'facilities' ? '设施' : '图形'
+  const featureName = layerType === 'points' ? '设施' : '图形'
   if (!confirm(`确定要删除这个${featureName}吗？`)) return
   
   try {
-    if (layerType === 'facilities') {
-      await deleteFacility(featureId)
-    } else if (layerType === 'landUse') {
-      await deleteLandUse(featureId)
+    if (layerType === 'points') {
+      await deletePoints(featureId)
+    } else if (layerType === 'lands') {
+      await deleteLands(featureId)
     }
     
     const source = layers.value[layerType]?.layer?.getSource()
     const feature = source?.getFeatures().find(f => f.get('id') === featureId)
     if (feature) source.removeFeature(feature)
     
-    if (layerType === 'facilities') {
-      mapDataStore.facilities = mapDataStore.facilities.filter(item => item.id !== featureId)
+    if (layerType === 'points') {
+      vectorStore.points = vectorStore.points.filter(item => item.id !== featureId)
     } else {
-      mapDataStore.landUse = mapDataStore.landUse.filter(item => item.id !== featureId)
+      vectorStore.lands = vectorStore.lands.filter(item => item.id !== featureId)
     }
     
     closePopup()
@@ -829,7 +829,7 @@ async function deleteFeature(featureId) {
 // ========== 交互设置 ==========
 function setupMapInteractions() {
   map.on('click', (event) => {
-    if(showLandUseForm.value || isDrawing.value) return
+    if(showLandsForm.value || isDrawing.value) return
 
     const features = map.getFeaturesAtPixel(event.pixel)
 
@@ -854,10 +854,10 @@ function closePopup() {
 }
 
 function cancelDraw() {
-  showLandUseForm.value = false
-  showFacilityForm.value = false
-  landUseForm.value = { name: '', type: '', admin_region: '', area: null }
-  facilityForm.value = { name: '', type: '', address: '', capacity: null, admin_region: '' }
+  showLandsForm.value = false
+  showPointForm.value = false
+  landsForm.value = { name: '', type: '', admin_region: '', area: null }
+  pointsForm.value = { name: '', type: '', address: '', capacity: null, admin_region: '' }
   drawFeature = null
   isDrawing.value = false
   
@@ -1195,8 +1195,8 @@ onUnmounted(() => {
 }
 
 /* 表单弹窗样式 */
-.facility-form,
-.landuse-form {
+.point-form,
+.lands-form {
   position: fixed;
   top: 0;
   left: 0;
