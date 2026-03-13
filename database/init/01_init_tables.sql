@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 
 -- 创建公共服务设施表
 -- 这个表存储学校、医院、图书馆等公共服务设施的信息
-CREATE TABLE IF NOT EXISTS public_facilities (
+CREATE TABLE IF NOT EXISTS points (
     -- 自增主键，唯一标识每条记录
     id SERIAL PRIMARY KEY,
     
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS public_facilities (
 );
 
 -- 插入深圳市部分公共服务设施数据
-INSERT INTO public_facilities (name, type, address, capacity, admin_region, geom) VALUES
+INSERT INTO points (name, type, address, capacity, admin_region, geom) VALUES
     -- 学校
     ('龙华中学', '学校', '龙华区公园路1号', 2500, '龙华区', 
      ST_GeomFromText('POINT(114.030 22.670)', 4326)),
@@ -69,7 +69,7 @@ ON CONFLICT DO NOTHING;
 
 -- 创建公共服务设施视图，便于GeoServer发布
 -- GeoServer是开源地图服务器，可以通过这个视图直接发布WFS服务
-CREATE OR REPLACE VIEW public_facilities_view AS
+CREATE OR REPLACE VIEW points_view AS
 SELECT
     id,
     name,
@@ -79,11 +79,11 @@ SELECT
     admin_region,
     created_at,
     geom
-FROM public_facilities;
+FROM points;
 
 
 -- 创建土地利用表
-CREATE TABLE IF NOT EXISTS land_use (
+CREATE TABLE IF NOT EXISTS lands (
     id SERIAL PRIMARY KEY,
     name VARCHAR(200) NOT NULL,
     type VARCHAR(50) NOT NULL,
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS land_use (
 );
 
 -- 插入示例土地利用数据
-INSERT INTO land_use (name, type, area, admin_region, geom) VALUES
+INSERT INTO lands (name, type, area, admin_region, geom) VALUES
     -- 商业用地
     ('龙华商业中心', '商业用地', 120000, '龙华区', 
      ST_GeomFromText('POLYGON((114.020 22.645, 114.030 22.645, 114.030 22.655, 114.020 22.655, 114.020 22.645))', 4326)),
@@ -126,7 +126,7 @@ INSERT INTO land_use (name, type, area, admin_region, geom) VALUES
 ON CONFLICT DO NOTHING;
 
 -- 创建土地利用视图，便于GeoServer发布
-CREATE OR REPLACE VIEW land_use_view AS
+CREATE OR REPLACE VIEW lands_view AS
 SELECT
     id,
     name,
@@ -135,4 +135,4 @@ SELECT
     admin_region,
     created_at,
     geom
-FROM land_use;
+FROM lands;

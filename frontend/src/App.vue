@@ -1,6 +1,6 @@
 <template>
   <div id="app">
-    <h1>龙华区公共服务设施规划管理系统</h1>
+    <h1>龙华区公共设施规划管理系统</h1>
     <Map/>
   </div>
 </template>
@@ -19,7 +19,7 @@ import Map from './components/Map.vue';
 h1 {
   position: fixed;
   top: 0;
-  width: 500px;
+  width: 400px;
   height: 45px;
   text-align: center;
   left: 50%;

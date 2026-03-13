@@ -1,65 +1,65 @@
 services:
   postgres:
     image: postgis/postgis:15-3.3
-    container_name: planning_postgres
+    container_name: fac_postgres
     environment:
-      POSTGRES_DB: planning_db
-      POSTGRES_USER: planning_admin
+      POSTGRES_DB: fac_db
+      POSTGRES_USER: fac_admin
       POSTGRES_PASSWORD: 666666
     ports:
       - "5432:5432"
     volumes:
-      - ./database/init:/docker-entrypoint-initdb.d  # 初始化SQL脚本目录
-      - postgres_data:/var/lib/postgresql/data  # 数据持久化
+      - ./database/init:/docker-entrypoint-initdb.d # 初始化SQL脚本目录
+      - postgres_data:/var/lib/postgresql/data # 数据持久化
     networks:
-      - planning_network
+      - fac_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U planning_admin -d planning_db"]
+      test: [ "CMD-SHELL", "pg_isready -U fac_admin -d fac_db" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: planning_pgadmin
+    container_name: fac_pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@planning.com  # 设置你的邮箱
-      PGADMIN_DEFAULT_PASSWORD: 666666  # 设置pgAdmin登录密码
+      PGADMIN_DEFAULT_EMAIL: admin@fac.com # 设置你的邮箱
+      PGADMIN_DEFAULT_PASSWORD: 666666 # 设置pgAdmin登录密码
     ports:
-      - "5050:80"  # pgAdmin访问端口
+      - "5050:80" # pgAdmin访问端口
     restart: unless-stopped
     depends_on:
       - postgres
     networks:
-      - planning_network
+      - fac_network
 
   geoserver:
-    image: kartoza/geoserver  # 一个流行的、维护良好的GeoServer Docker镜像
-    container_name: planning_geoserver
+    image: kartoza/geoserver # 一个流行的、维护良好的GeoServer Docker镜像
+    container_name: fac_geoserver
     ports:
-      - "8080:8080"  # 将本地的8080端口映射到容器的8080端口
+      - "8080:8080" # 将本地的8080端口映射到容器的8080端口
     volumes:
-      - E:\Projects\planning_webgis_project\database\GeoServer:/geodata
+      - E:\Projects\fac_webgis_project\database\GeoServer:/geodata
     environment:
-      GEOSERVER_ADMIN_USER: planning_admin
+      GEOSERVER_ADMIN_USER: fac_admin
       GEOSERVER_ADMIN_PASSWORD: 666666
     restart: unless-stopped
     depends_on:
       - postgres
     networks:
-      - planning_network
-  
+      - fac_network
+
   # 后端服务
   backend:
-    container_name: planning_backend
+    container_name: fac_backend
     build: ./backend
     environment:
       - NODE_ENV=development
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=planning_db
-      - DB_USER=planning_admin
+      - DB_NAME=fac_db
+      - DB_USER=fac_admin
       - DB_PASSWORD=666666
       - SERVER_PORT=3000
     ports:
@@ -67,39 +67,40 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
-    command: ["npm", "run", "dev"]
+    command: [ "npm", "run", "dev" ]
     networks:
-      - planning_network
+      - fac_network
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
-  
+
   # 前端服务
   frontend:
     build: ./frontend
-    container_name: planning_frontend
+    container_name: fac_frontend
     environment:
       - VITE_HOST=0.0.0.0
       - HOST=0.0.0.0
       - VITE_PORT=5173
       - NODE_ENV=development
-      - BROWSER=none  # 防止在容器内打开浏览器
+      - BROWSER=none # 防止在容器内打开浏览器
     ports:
       - "5173:5173"
     volumes:
-      - ./frontend:/app  # 代码热重载
+      - ./frontend:/app # 代码热重载
       - /app/node_modules
     networks:
-      - planning_network
+      - fac_network
     depends_on:
       - backend
     restart: unless-stopped
-    
+
 volumes:
-  postgres_data:  # 声明数据卷，确保数据库数据持久化
+  postgres_data: # 声明数据卷，确保数据库数据持久化
   geoserver_data:
 
+
 networks:
-  planning_network:
+  fac_network:
     driver: bridge
