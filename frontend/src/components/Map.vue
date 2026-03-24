@@ -99,7 +99,7 @@
       </div>
     </div>
 
-    <!-- 公共设施表单弹窗 -->
+    <!-- 设施点表单弹窗 -->
     <div v-if="showPointForm" class="point-form">
       <div class="form-overlay" @click="cancelDraw"></div>
       <div class="form-content">
@@ -148,7 +148,7 @@
       </div>
     </div>
 
-    <!-- 土地利用表单弹窗 -->
+    <!-- 设施用地表单弹窗 -->
     <div v-if="showLandsForm" class="lands-form">
       <div class="form-overlay" @click="cancelDraw"></div>
       <div class="form-content">
