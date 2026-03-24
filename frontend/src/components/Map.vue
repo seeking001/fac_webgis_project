@@ -668,38 +668,23 @@ function setupPointModify(source) {
   
   pointModify = new Modify({ source })
   
-  // pointModify.on('modifyend', async (event) => {
-  //   const modifiedFeature = event.features.item(0)
-  //   const id = modifiedFeature.get('id')
+  pointModify.on('modifyend', (event) => {
+    const modifiedFeature = event.features.item(0)
+    const id = modifiedFeature.get('id')
     
-  //   try {
-  //     const coords = toLonLat(modifiedFeature.getGeometry().getCoordinates())
-  //     const updateData = {
-  //       name: modifiedFeature.get('name') || '未命名设施',
-  //       type: modifiedFeature.get('type') || '学校',
-  //       address: modifiedFeature.get('address') || '',
-  //       capacity: modifiedFeature.get('capacity') || 0,
-  //       admin_region: modifiedFeature.get('admin_region') || '龙华区',
-  //       geometry: {
-  //         type: 'Point',
-  //         coordinates: coords
-  //       }
-  //     }
+    if (selectedFeature.value && selectedFeature.value.id === id) {
+      const coords = toLonLat(modifiedFeature.getGeometry().getCoordinates())
       
-  //     await updatePoints(id, updateData)
-  //     console.log('✅ 设施位置已保存')
-
-  //     // 更新store后，更新保存的原始几何
-  //     if (isEditing.value && originalGeometry.value) {
-  //       originalGeometry.value = modifiedFeature.getGeometry().clone()
-  //     }
-  //   } catch (error) {
-  //     console.log('保存失败', error)
-  //   }
-  // })
+      // 直接修改现有对象的 geometry 属性
+      selectedFeature.value.geometry = {
+        type: 'Point',
+        coordinates: coords
+      }
+    }
+  })
   
   map.addInteraction(pointModify)
-  pointModify.setActive(layers.value.points.editable || false)
+  pointModify.setActive(false)
 }
 
 // 编辑设施用地
@@ -711,42 +696,26 @@ function setupLandsModify(source) {
   
   landsModify = new Modify({ source })
   
-  // landsModify.on('modifyend', async (event) => {
-  //   const modifiedFeature = event.features.item(0)
-  //   const id = modifiedFeature.get('id')
+  landsModify.on('modifyend', async (event) => {
+    const modifiedFeature = event.features.item(0)
+    const id = modifiedFeature.get('id')
 
-  //   try {
-  //     const geometry = modifiedFeature.getGeometry()
-  //     const coords3857 = geometry.getCoordinates()
-  //     const coords4326 = coords3857.map(ring => 
-  //       ring.map(coord => toLonLat(coord))
-  //     )
+    // 更新selectedFeature的数据，保持弹窗显示正常
+    if (selectedFeature.value && selectedFeature.value.id === id) {
+      const geometry = modifiedFeature.getGeometry()
+      const coords4326 = geometry.getCoordinates().map(ring =>
+        ring.map(coord => toLonLat(coord))
+      )
 
-  //     const updateData = {
-  //       name: modifiedFeature.get('name') || '未命名地块',
-  //       type: modifiedFeature.get('type') || '居住用地',
-  //       admin_region: modifiedFeature.get('admin_region') || '龙华区',
-  //       area: modifiedFeature.get('area') || 0,
-  //       geometry: {
-  //         type: 'Polygon',
-  //         coordinates: coords4326
-  //       }
-  //     }
-    
-  //     await updateLands(id, updateData)
-  //     console.log('✅ 保存成功')
-
-  //     // 更新store后，更新保存的原始几何
-  //     if (isEditing.value && originalGeometry.value) {
-  //       originalGeometry.value = modifiedFeature.getGeometry().clone()
-  //     }
-  //   } catch (error) {
-  //     console.log('保存失败', error)
-  //   }
-  // })
+      selectedFeature.value.geometry = {
+        type: 'Polygon',
+        coordinates: coords4326
+      }
+    }
+  })
   
   map.addInteraction(landsModify)
-  landsModify.setActive(layers.value.lands.editable)
+  landsModify.setActive(false)
 }
 
 // 退出编辑模式函数
@@ -1085,12 +1054,16 @@ function setupMapInteractions() {
     const features = map.getFeaturesAtPixel(event.pixel)
 
     if(features.length > 0) {
+      // 每次点击都重新获取要素属性
+      const feature = features[0]
+      const properties = feature.getProperties()
+      // 确保geometry属性已存在
+      selectedFeature.value = properties
+      popupPosition.value = { x: event.pixel[0] + 20, y: event.pixel[1] }
       // 如果之前处于编辑模式，退出编辑
       if(isEditing.value){
         exitEditMode()
       }
-      selectedFeature.value = features[0].getProperties()
-      popupPosition.value = { x: event.pixel[0] + 20, y: event.pixel[1] }
     } else {
       closePopup()
     }
@@ -1138,8 +1111,11 @@ onMounted(() => {
   // 添加ECS键盘监听
   escHandler = (e) => {
     if (e.key === 'Escape' && isEditing.value) {
-      exitEditMode()
-      closePopup()
+      // 只在图形编辑模式且没有打开表单时处理
+      if(isEditing.value && !showPointForm.value && !showLandsForm.value) {
+        exitEditMode()
+        closePopup()
+      }
     }
   }
   document.addEventListener('keydown', escHandler)
@@ -1459,8 +1435,8 @@ onUnmounted(() => {
 }
 
 .edit-btn {
-  flex: 1;
-  padding: 3px 6px;
+  margin-top: 5px;
+  padding: 2px 6px;
   background: rgba(50, 0, 100, 0.5);
   font-size: 12px;
   color: white;
@@ -1470,16 +1446,16 @@ onUnmounted(() => {
 }
 
 .edit-btn:hover {
-  background: rgb(50, 0, 100);
+  background: rgba(50, 0, 100, 1);
 }
 
 .edit-btn.active {
-  background: rgb(100, 50, 200);
+  background: rgba(150, 0, 100, 0.8);
 }
 
 .delete-btn {
   margin-top: 5px;
-  padding: 1px 6px;
+  padding: 2px 6px;
   background: rgba(50, 0, 100, 0.5);
   font-size: 12px;
   color: white;
