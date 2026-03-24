@@ -289,7 +289,8 @@ const showPointForm = ref(false)
 const showLandsForm = ref(false)
 const isDrawing = ref(false)
 const isEditing = ref(false)  // 是否处于编辑模式
-let currentEditFeature = null // 当前编辑的要素（临时变量）
+const originalGeometry = ref(null)  // 保存原始几何，用于取消编辑
+let escHandler = null  // 键盘状态
 
 // 表单数据
 const pointsForm = ref({
@@ -325,7 +326,7 @@ const layers = ref({
     layer: null,
     selectedType: 'all',
     drawType: 'Point',
-    editable: false,
+    // editable: false,
     types: [
       { label: '全部类型', value: 'all' },
       { label: '学校', value: '学校' },
@@ -342,7 +343,7 @@ const layers = ref({
     layer: null,
     selectedType: 'all',
     drawType: 'Polygon',
-    editable: false,
+    // editable: false,
     types: [
       { label: '全部类型', value: 'all' },
       { label: '商业用地', value: '商业用地' },
@@ -637,20 +638,23 @@ function toggleEditMode(feature) {
   if (!isEditing.value) {
     // 进入编辑图形模式
     isEditing.value = true
-    currentEditFeature = feature
-    
-    // 激活对应图层的编辑
-    if (layerType === 'points') {
-      if (pointModify) pointModify.setActive(true)
-    } else {
-      if (landsModify) landsModify.setActive(true)
+
+    // 获取要编辑的地图要素
+    const source = layerObj.layer.getSource()
+    const mapFeature = source.getFeatures().find(f => f.get('id') === feature.id)
+
+    if(mapFeature){
+      // 保存原始几何
+      originalGeometry.value = mapFeature.getGeometry().clone()
+      // 激活对应图层的编辑
+      if (layerType === 'points') {
+        pointModify.setActive(true)
+      } else {
+        landsModify.setActive(true)
+      }
     }
   } else {
     // 退出编辑图形模式，进入编辑属性模式
-    if (pointModify) pointModify.setActive(false)
-    if (landsModify) landsModify.setActive(false)
-    
-    // 打开属性编辑表单
     openEditForm(feature)
   }
 }
@@ -664,36 +668,35 @@ function setupPointModify(source) {
   
   pointModify = new Modify({ source })
   
-  pointModify.on('modifyend', async (event) => {
-    const modifiedFeature = event.features.item(0)
-    const id = modifiedFeature.get('id')
+  // pointModify.on('modifyend', async (event) => {
+  //   const modifiedFeature = event.features.item(0)
+  //   const id = modifiedFeature.get('id')
     
-    try {
-      const coords = toLonLat(modifiedFeature.getGeometry().getCoordinates())
-      const updateData = {
-        name: modifiedFeature.get('name') || '未命名设施',
-        type: modifiedFeature.get('type') || '学校',
-        address: modifiedFeature.get('address') || '',
-        capacity: modifiedFeature.get('capacity') || 0,
-        admin_region: modifiedFeature.get('admin_region') || '龙华区',
-        geometry: {
-          type: 'Point',
-          coordinates: coords
-        }
-      }
+  //   try {
+  //     const coords = toLonLat(modifiedFeature.getGeometry().getCoordinates())
+  //     const updateData = {
+  //       name: modifiedFeature.get('name') || '未命名设施',
+  //       type: modifiedFeature.get('type') || '学校',
+  //       address: modifiedFeature.get('address') || '',
+  //       capacity: modifiedFeature.get('capacity') || 0,
+  //       admin_region: modifiedFeature.get('admin_region') || '龙华区',
+  //       geometry: {
+  //         type: 'Point',
+  //         coordinates: coords
+  //       }
+  //     }
       
-      await updatePoints(id, updateData)
-      console.log('✅ 设施位置已保存')
+  //     await updatePoints(id, updateData)
+  //     console.log('✅ 设施位置已保存')
 
-      // 更新store
-      const index = vectorStore.points.findIndex(p => p.id === id)
-      if (index !== -1) {
-        vectorStore.points[index] = { ...vectorStore.points[index], ...updateData }
-      }
-    } catch (error) {
-      console.log('保存失败', error)
-    }
-  })
+  //     // 更新store后，更新保存的原始几何
+  //     if (isEditing.value && originalGeometry.value) {
+  //       originalGeometry.value = modifiedFeature.getGeometry().clone()
+  //     }
+  //   } catch (error) {
+  //     console.log('保存失败', error)
+  //   }
+  // })
   
   map.addInteraction(pointModify)
   pointModify.setActive(layers.value.points.editable || false)
@@ -708,40 +711,68 @@ function setupLandsModify(source) {
   
   landsModify = new Modify({ source })
   
-  landsModify.on('modifyend', async (event) => {
-    const modifiedFeature = event.features.item(0)
-    const id = modifiedFeature.get('id')
+  // landsModify.on('modifyend', async (event) => {
+  //   const modifiedFeature = event.features.item(0)
+  //   const id = modifiedFeature.get('id')
 
-    try {
-      const geometry = modifiedFeature.getGeometry()
-      const coords3857 = geometry.getCoordinates()
-      const coords4326 = coords3857.map(ring => 
-        ring.map(coord => toLonLat(coord))
-      )
+  //   try {
+  //     const geometry = modifiedFeature.getGeometry()
+  //     const coords3857 = geometry.getCoordinates()
+  //     const coords4326 = coords3857.map(ring => 
+  //       ring.map(coord => toLonLat(coord))
+  //     )
 
-      const updateData = {
-        name: modifiedFeature.get('name') || '未命名地块',
-        type: modifiedFeature.get('type') || '居住用地',
-        admin_region: modifiedFeature.get('admin_region') || '龙华区',
-        area: modifiedFeature.get('area') || 0,
-        geometry: {
-          type: 'Polygon',
-          coordinates: coords4326
-        }
-      }
+  //     const updateData = {
+  //       name: modifiedFeature.get('name') || '未命名地块',
+  //       type: modifiedFeature.get('type') || '居住用地',
+  //       admin_region: modifiedFeature.get('admin_region') || '龙华区',
+  //       area: modifiedFeature.get('area') || 0,
+  //       geometry: {
+  //         type: 'Polygon',
+  //         coordinates: coords4326
+  //       }
+  //     }
     
-      await updateLands(id, updateData)
-      console.log('✅ 保存成功')
-    } catch (error) {
-      console.log('保存失败', error)
-    }
-  })
+  //     await updateLands(id, updateData)
+  //     console.log('✅ 保存成功')
+
+  //     // 更新store后，更新保存的原始几何
+  //     if (isEditing.value && originalGeometry.value) {
+  //       originalGeometry.value = modifiedFeature.getGeometry().clone()
+  //     }
+  //   } catch (error) {
+  //     console.log('保存失败', error)
+  //   }
+  // })
   
   map.addInteraction(landsModify)
   landsModify.setActive(layers.value.lands.editable)
 }
 
-// 打开表单函数
+// 退出编辑模式函数
+function exitEditMode(){
+  // 退出编辑时，如何几何被修改了，就恢复到编辑前状态
+  if(originalGeometry.value && selectedFeature.value){
+    // 获取当前正在编辑的要素
+    const layerType = selectedFeature.value.layerType
+    if (layerType) {
+      const layerObj = layers.value[layerType]
+      const source = layerObj.layer.getSource()
+      const mapFeature = source.getFeatures().find(f => f.get('id') === selectedFeature.value.id)
+      if (mapFeature) {
+        mapFeature.setGeometry(originalGeometry.value.clone())
+      }
+    }
+    originalGeometry.value = null
+  }
+
+  // 关闭编辑交互
+  if (pointModify) pointModify.setActive(false)
+  if (landsModify) landsModify.setActive(false)
+  isEditing.value = false
+}
+
+// 打开属性表单函数
 function openEditForm(feature) {
   if (feature.layerType === 'points') {
     pointsForm.value = {
@@ -763,41 +794,24 @@ function openEditForm(feature) {
   }
 }
 
-// 编辑取消函数
-function cancelEdit() {
-  showLandsForm.value = false
-  showPointForm.value = false
-  landsForm.value = { name: '', type: '', admin_region: '', area: null }
-  pointsForm.value = { name: '', type: '', address: '', capacity: null, admin_region: '' }
-  
-  // 退出编辑模式
-  if (isEditing.value) {
-    if (pointModify) pointModify.setActive(false)
-    if (landsModify) landsModify.setActive(false)
-    isEditing.value = false
-    currentEditFeature = null
-  }
-}
-
 
 // ========== 数据表单与属性保存 ==========
-
 // 公共设施数据保存函数
 async function savePointToDatabase() {
   try {
     if (!pointsForm.value.name) return
-    
+
     // 判断是编辑还是新增
     if (selectedFeature.value && selectedFeature.value.id) {
-      // 编辑现有设施
+      // ========== 编辑现有设施 ==========
       const id = selectedFeature.value.id
-      
-      // 获取当前要素的几何信息
-      let geometry = selectedFeature.value.geometry
-      
-      // 如果要素有对应的地图要素，获取最新的几何
+
+      // 获取当前几何（可能已被拖动修改）
       const source = layers.value.points.layer?.getSource()
       const feature = source?.getFeatures().find(f => f.get('id') === id)
+
+      // 获取最新几何坐标
+      let geometry = selectedFeature.value.geometry
       if (feature) {
         const coords = toLonLat(feature.getGeometry().getCoordinates())
         geometry = {
@@ -805,7 +819,7 @@ async function savePointToDatabase() {
           coordinates: coords
         }
       }
-      
+
       const updateData = {
         name: pointsForm.value.name,
         type: pointsForm.value.type,
@@ -814,43 +828,61 @@ async function savePointToDatabase() {
         admin_region: pointsForm.value.admin_region,
         geometry: geometry
       }
-      
+
       const response = await updatePoints(id, updateData)
-      
+
       if (response.success) {
-        // 更新地图上的要素
+        // 更新地图要素的属性
         if (feature) {
+          // 更新几何（保持修改后的状态）
+          const currentGeom = feature.getGeometry()
+          feature.setGeometry(currentGeom.clone())
+
+          // 更新属性
           feature.set('name', pointsForm.value.name)
           feature.set('type', pointsForm.value.type)
           feature.set('address', pointsForm.value.address)
           feature.set('capacity', pointsForm.value.capacity)
           feature.set('admin_region', pointsForm.value.admin_region)
         }
-        
-        // 更新store
+
+        // 更新 store
         const index = vectorStore.points.findIndex(p => p.id === id)
         if (index !== -1) {
-          vectorStore.points[index] = { 
-            ...vectorStore.points[index], 
+          vectorStore.points[index] = {
+            ...vectorStore.points[index],
             ...updateData,
-            id: id  // 确保id不变
+            id: id
           }
         }
-        
+
         // 更新弹窗显示
-        selectedFeature.value = { 
-          ...selectedFeature.value, 
+        selectedFeature.value = {
+          ...selectedFeature.value,
           ...updateData,
-          id: id 
+          id: id
         }
-        
+
         alert('更新成功！')
-        cancelEdit()
+
+        // 关闭编辑交互
+        if (pointModify) pointModify.setActive(false)
+
+        // 关闭要素弹窗（但不触发 exitEditMode）
+        selectedFeature.value = null
+        popupPosition.value = null
+
+        // 清理编辑状态（几何已正确保存，不再需要原始几何）
+        isEditing.value = false
+        originalGeometry.value = null
+
+        // 关闭属性表单
+        showPointForm.value = false
       }
     } else {
-      // 创建新设施（原有逻辑保持不变）
+      // ========== 创建新设施 ==========
       if (!drawFeature) return
-      
+
       const response = await createPoints({
         name: pointsForm.value.name,
         type: pointsForm.value.type,
@@ -862,12 +894,25 @@ async function savePointToDatabase() {
           coordinates: toLonLat(drawFeature.getGeometry().getCoordinates())
         }
       })
-      
+
       if (response.success) {
-        // ... 原有创建逻辑
+        // 将新要素添加到地图
+        const newFeature = drawFeature.clone()
+        newFeature.set('id', response.data.id)
+        newFeature.set('name', pointsForm.value.name)
+        newFeature.set('type', pointsForm.value.type)
+        newFeature.set('address', pointsForm.value.address)
+        newFeature.set('capacity', pointsForm.value.capacity)
+        newFeature.set('admin_region', pointsForm.value.admin_region)
+        newFeature.set('layerType', 'points')
+
+        layers.value.points.layer?.getSource()?.addFeature(newFeature)
+        vectorStore.points.push(response.data)
+
+        alert('添加成功！')
+        cancelDraw() // 关闭表单并清理绘制状态
       }
     }
-    
   } catch (error) {
     console.error('保存失败:', error)
     alert('保存失败：' + error.message)
@@ -878,21 +923,21 @@ async function savePointToDatabase() {
 async function saveLandsToDatabase() {
   try {
     if (!landsForm.value.name) return
-    
+
     // 判断是编辑还是新增
     if (selectedFeature.value && selectedFeature.value.id) {
-      // 编辑现有用地
+      // ========== 编辑现有用地 ==========
       const id = selectedFeature.value.id
-      
-      // 获取当前要素的几何信息
-      let geometry = selectedFeature.value.geometry
-      
-      // 如果要素有对应的地图要素，获取最新的几何
+
+      // 获取当前几何（可能已被拖动修改）
       const source = layers.value.lands.layer?.getSource()
       const feature = source?.getFeatures().find(f => f.get('id') === id)
+
+      // 获取最新几何坐标
+      let geometry = selectedFeature.value.geometry
       if (feature) {
         const geometry3857 = feature.getGeometry()
-        const coords4326 = geometry3857.getCoordinates().map(ring => 
+        const coords4326 = geometry3857.getCoordinates().map(ring =>
           ring.map(coord => toLonLat(coord))
         )
         geometry = {
@@ -900,7 +945,7 @@ async function saveLandsToDatabase() {
           coordinates: coords4326
         }
       }
-      
+
       const updateData = {
         name: landsForm.value.name,
         type: landsForm.value.type,
@@ -908,43 +953,84 @@ async function saveLandsToDatabase() {
         area: landsForm.value.area || 0,
         geometry: geometry
       }
-      
+
       const response = await updateLands(id, updateData)
-      
+
       if (response.success) {
-        // 更新地图上的要素
+        // 更新地图要素的属性
         if (feature) {
           feature.set('name', landsForm.value.name)
           feature.set('type', landsForm.value.type)
           feature.set('admin_region', landsForm.value.admin_region)
           feature.set('area', landsForm.value.area)
         }
-        
-        // 更新store
+
+        // 更新 store
         const index = vectorStore.lands.findIndex(l => l.id === id)
         if (index !== -1) {
-          vectorStore.lands[index] = { 
-            ...vectorStore.lands[index], 
+          vectorStore.lands[index] = {
+            ...vectorStore.lands[index],
             ...updateData,
             id: id
           }
         }
-        
+
         // 更新弹窗显示
-        selectedFeature.value = { 
-          ...selectedFeature.value, 
+        selectedFeature.value = {
+          ...selectedFeature.value,
           ...updateData,
-          id: id 
+          id: id
         }
-        
+
         alert('更新成功！')
-        cancelEdit()
+
+        // 关闭编辑交互
+        if (landsModify) landsModify.setActive(false)
+
+        // 关闭要素弹窗（但不触发 exitEditMode）
+        selectedFeature.value = null
+        popupPosition.value = null
+
+        // 清理编辑状态（几何已正确保存，不再需要原始几何）
+        isEditing.value = false
+        originalGeometry.value = null
+
+        // 关闭属性表单
+        showLandsForm.value = false
       }
     } else {
-      // 创建新用地（原有逻辑保持不变）
+      // ========== 创建新用地 ==========
       if (!drawFeature) return
-      
-      // ... 原有创建逻辑
+
+      const response = await createLands({
+        name: landsForm.value.name,
+        type: landsForm.value.type,
+        geometry: {
+          type: 'Polygon',
+          coordinates: drawFeature.getGeometry().getCoordinates().map(ring =>
+            ring.map(coord => toLonLat(coord))
+          )
+        },
+        area: landsForm.value.area || 0,
+        admin_region: landsForm.value.admin_region || '龙华区'
+      })
+
+      if (response.success) {
+        // 将新要素添加到地图
+        const newFeature = drawFeature.clone()
+        newFeature.set('id', response.data.id)
+        newFeature.set('name', landsForm.value.name)
+        newFeature.set('type', landsForm.value.type)
+        newFeature.set('admin_region', landsForm.value.admin_region)
+        newFeature.set('area', landsForm.value.area)
+        newFeature.set('layerType', 'lands')
+
+        layers.value.lands.layer?.getSource()?.addFeature(newFeature)
+        vectorStore.lands.push(response.data)
+
+        alert('添加成功！')
+        cancelDraw()
+      }
     }
   } catch (error) {
     console.error('保存失败:', error)
@@ -994,21 +1080,17 @@ async function deleteFeature(featureId) {
 // ========== 交互设置 ==========
 function setupMapInteractions() {
   map.on('click', (event) => {
-    if(showLandsForm.value || isDrawing.value) return
+    if(showLandsForm.value || isDrawing.value || showPointForm.value) return
 
     const features = map.getFeaturesAtPixel(event.pixel)
 
     if(features.length > 0) {
+      // 如果之前处于编辑模式，退出编辑
+      if(isEditing.value){
+        exitEditMode()
+      }
       selectedFeature.value = features[0].getProperties()
       popupPosition.value = { x: event.pixel[0] + 20, y: event.pixel[1] }
-
-      // 如果之前处于编辑模式，关闭它
-      if (isEditing.value) {
-        if (pointModify) pointModify.setActive(false)
-        if (landsModify) landsModify.setActive(false)
-        isEditing.value = false
-        currentEditFeature = null
-      }
     } else {
       closePopup()
     }
@@ -1022,14 +1104,12 @@ function setupMapInteractions() {
 
 // ========== 工具函数 ==========
 function closePopup() {
+  // 如何正在编辑模式，放弃编辑并恢复到编辑前状态
+  if (isEditing.value) {
+    exitEditMode()
+  }
   selectedFeature.value = null
   popupPosition.value = null
-  if (isEditing.value) {
-    if (pointModify) pointModify.setActive(false)
-    if (landsModify) landsModify.setActive(false)
-    isEditing.value = false
-    currentEditFeature = null
-  }
 }
 
 function cancelDraw() {
@@ -1054,9 +1134,23 @@ function cancelDraw() {
 onMounted(() => {
   if (!mapContainer.value) return
   initMap()
+
+  // 添加ECS键盘监听
+  escHandler = (e) => {
+    if (e.key === 'Escape' && isEditing.value) {
+      exitEditMode()
+      closePopup()
+    }
+  }
+  document.addEventListener('keydown', escHandler)
 })
 
 onUnmounted(() => {
+  // 移除ECS键盘监听
+  if (escHandler) {
+    document.removeEventListener('keydown', escHandler)
+  }
+
   if(map) {
     map.setTarget(null)
     map = null
