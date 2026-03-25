@@ -49,7 +49,9 @@
         
         <!-- 2. 绘制与编辑 -->
         <div class="control-group">
-          <button @click="startDrawing(key)" :disabled="!config.visible">绘制添加</button>
+          <button @click="startDrawing(key)" :disabled="!config.visible">绘制</button>
+          <button @click="handleImport(key)" :disabled="!config.visible">导入</button>
+          <button @click="handleExport(key)" :disabled="!config.visible">导出</button>
         </div>
       </div>
     </div>
@@ -200,7 +202,8 @@ import { Map, View } from 'ol'
 import 'ol/ol.css'
 import TileLayer from 'ol/layer/Tile'
 import Feature from 'ol/Feature'
-import { fromLonLat, toLonLat } from 'ol/proj'
+import { fromLonLat, toLonLat, transform } from 'ol/proj'
+import proj4 from 'proj4'
 import XYZ from 'ol/source/XYZ'
 import VectorSource from 'ol/source/Vector'
 import VectorLayer from 'ol/layer/Vector'
@@ -291,6 +294,13 @@ const isDrawing = ref(false)
 const isEditing = ref(false)  // 是否处于编辑模式
 const originalGeometry = ref(null)  // 保存原始几何，用于取消编辑
 let escHandler = null  // 键盘状态
+
+// 导入导出相关
+const importFile = ref(null)               // 暂存待导入的文件
+const importLayerType = ref(null)          // 当前导入的目标图层 'points' 或 'lands'
+const importFeatures = ref([])             // 解析后的要素列表
+const importCurrentIndex = ref(0)          // 当前处理的要素索引（用于多要素逐个提示）
+const showImportConfirm = ref(false)       // 是否显示导入确认对话框
 
 // 表单数据
 const pointsForm = ref({
@@ -624,8 +634,371 @@ function landsDraw() {
   map.addInteraction(drawInteraction)
 }
 
+// ========== 导入导出功能 ==========
+// 导入文件（触发文件选择）
+function handleImport(layerType) {
+  importLayerType.value = layerType
+  // 创建隐藏的文件输入
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.geojson'
+  input.onchange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    readGeoJSONFile(file)
+  }
+  input.click()
+}
+
+// 读取并解析 GeoJSON 文件
+function readGeoJSONFile(file) {
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    try {
+      const geojson = JSON.parse(e.target.result)
+      // 校验几何类型
+      const layerType = importLayerType.value
+      const expectedType = layerType === 'points' ? 'Point' : 'Polygon'
+      const features = geojson.features || [geojson]
+      
+      // 过滤出符合几何类型的要素
+      const validFeatures = features.filter(f => {
+        const geomType = f.geometry?.type
+        return geomType === expectedType
+      })
+      
+      if (validFeatures.length === 0) {
+        alert(`文件中没有有效的${expectedType}数据`)
+        return
+      }
+      
+      importFeatures.value = validFeatures
+      // 弹出坐标系选择对话框
+      showCoordinateDialogForImport()
+    } catch (err) {
+      alert('文件解析失败，请确保是有效的 GeoJSON 文件')
+      console.error(err)
+    }
+  }
+  reader.readAsText(file, 'UTF-8')
+}
+
+// 显示坐标系选择对话框
+function showCoordinateDialogForImport() {
+  const select = document.createElement('select')
+  select.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;padding:10px;background:white;border:2px solid #409eff;border-radius:5px;font-size:14px;width:300px;'
+  select.innerHTML = `
+    <option value="">请选择源文件坐标系</option>
+    <option value="EPSG:4326">WGS84 经纬度</option>
+    <option value="EPSG:4547">CGCS2000 / 3度带 114E</option>
+  `
+  
+  const btnGroup = document.createElement('div')
+  btnGroup.style.cssText = 'position:fixed;top:calc(50% + 50px);left:50%;transform:translateX(-50%);z-index:9999;display:flex;gap:10px;'
+  
+  const confirmBtn = document.createElement('button')
+  confirmBtn.textContent = '确定'
+  confirmBtn.style.cssText = 'padding:5px 15px;background:#409eff;color:white;border:none;border-radius:3px;cursor:pointer;'
+  
+  const cancelBtn = document.createElement('button')
+  cancelBtn.textContent = '取消'
+  cancelBtn.style.cssText = 'padding:5px 15px;background:#ccc;color:#333;border:none;border-radius:3px;cursor:pointer;'
+  
+  btnGroup.appendChild(confirmBtn)
+  btnGroup.appendChild(cancelBtn)
+  
+  const mask = document.createElement('div')
+  mask.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9998;'
+  
+  document.body.appendChild(mask)
+  document.body.appendChild(select)
+  document.body.appendChild(btnGroup)
+  
+  const closeDialog = () => {
+    document.body.removeChild(mask)
+    document.body.removeChild(select)
+    document.body.removeChild(btnGroup)
+  }
+  
+  confirmBtn.onclick = () => {
+    const sourceEPSG = select.value
+    if (!sourceEPSG) {
+      alert('请选择坐标系')
+      return
+    }
+    closeDialog()
+    
+    if (sourceEPSG === 'EPSG:4547' && !proj4.defs('EPSG:4547')) {
+      proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
+    }
+    
+    importWithTransform(sourceEPSG)
+  }
+  
+  cancelBtn.onclick = () => {
+    closeDialog()
+    importFeatures.value = []
+    importLayerType.value = null
+  }
+}
+
+// 执行坐标转换并逐个导入
+async function importWithTransform(sourceEPSG) {
+  // 定义投影定义（如果尚未定义）
+  if (!proj4.defs('EPSG:4547')) {
+    proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
+  }
+  
+  const targetEPSG = 'EPSG:4326'  // 数据库存储坐标系
+  
+  for (const feature of importFeatures.value) {
+    let geom = feature.geometry
+    let coordinates = geom.coordinates
+    
+    // 坐标转换
+    if (sourceEPSG !== targetEPSG) {
+      if (geom.type === 'Point') {
+        const transformed = transform(coordinates, sourceEPSG, targetEPSG)
+        coordinates = transformed
+      } else if (geom.type === 'Polygon') {
+        coordinates = coordinates.map(ring =>
+          ring.map(coord => transform(coord, sourceEPSG, targetEPSG))
+        )
+      }
+    }
+    
+    // 准备属性（留空）
+    const props = feature.properties || {}
+    const layerType = importLayerType.value
+    
+    let data = {}
+    if (layerType === 'points') {
+      data = {
+        name: props.name || '',
+        type: props.type || '',
+        address: props.address || '',
+        capacity: props.capacity || 0,
+        admin_region: props.admin_region || '',
+        geometry: {
+          type: geom.type,
+          coordinates: coordinates
+        }
+      }
+      try {
+        const response = await createPoints(data)
+        if (response.success) {
+          // 添加到地图和 store（简单做法：刷新图层）
+          // 为简化，直接重新加载当前图层的所有数据
+          const layerObj = layers.value[layerType]
+          if (layerObj.loaded) {
+            const bbox = getMapBbox(map)
+            if (layerType === 'points') {
+              await vectorStore.loadPoints(bbox)
+            } else {
+              await vectorStore.loadLands(bbox)
+            }
+            updateVectorLayer(layerType)
+          }
+        } else {
+          console.warn('导入失败:', response)
+        }
+      } catch (err) {
+        console.error('保存失败', err)
+      }
+    } else {
+      data = {
+        name: props.name || '',
+        type: props.type || '',
+        admin_region: props.admin_region || '',
+        area: props.area || 0,
+        geometry: {
+          type: geom.type,
+          coordinates: coordinates
+        }
+      }
+      try {
+        const response = await createLands(data)
+        if (response.success) {
+          const layerObj = layers.value[layerType]
+          if (layerObj.loaded) {
+            const bbox = getMapBbox(map)
+            await vectorStore.loadLands(bbox)
+            updateVectorLayer(layerType)
+          }
+        } else {
+          console.warn('导入失败:', response)
+        }
+      } catch (err) {
+        console.error('保存失败', err)
+      }
+    }
+  }
+  
+  alert(`成功导入 ${importFeatures.value.length} 个要素`)
+  importFeatures.value = []
+  importLayerType.value = null
+}
+
+// 导出图层数据函数
+async function handleExport(layerType) {
+  const layerObj = layers.value[layerType]
+  if (!layerObj || !layerObj.layer) {
+    alert('请先加载图层数据')
+    return
+  }
+  
+  const source = layerObj.layer.getSource()
+  const features = source.getFeatures()
+  if (features.length === 0) {
+    alert('没有可导出的要素')
+    return
+  }
+  
+  // 创建选择框
+  const select = document.createElement('select')
+  select.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;padding:10px;background:white;border:2px solid #409eff;border-radius:5px;font-size:14px;width:300px;'
+  select.innerHTML = `
+    <option value="">请选择导出坐标系</option>
+    <option value="EPSG:4326">WGS84 经纬度</option>
+    <option value="EPSG:4547">CGCS2000 / 3度带 114E</option>
+  `
+  
+  // 创建按钮容器
+  const btnGroup = document.createElement('div')
+  btnGroup.style.cssText = 'position:fixed;top:calc(50% + 50px);left:50%;transform:translateX(-50%);z-index:9999;display:flex;gap:10px;'
+  
+  const confirmBtn = document.createElement('button')
+  confirmBtn.textContent = '确定'
+  confirmBtn.style.cssText = 'padding:5px 15px;background:#409eff;color:white;border:none;border-radius:3px;cursor:pointer;'
+  
+  const cancelBtn = document.createElement('button')
+  cancelBtn.textContent = '取消'
+  cancelBtn.style.cssText = 'padding:5px 15px;background:#ccc;color:#333;border:none;border-radius:3px;cursor:pointer;'
+  
+  btnGroup.appendChild(confirmBtn)
+  btnGroup.appendChild(cancelBtn)
+  
+  // 创建遮罩层
+  const mask = document.createElement('div')
+  mask.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9998;'
+  
+  document.body.appendChild(mask)
+  document.body.appendChild(select)
+  document.body.appendChild(btnGroup)
+  
+  // 关闭弹窗的函数
+  const closeDialog = () => {
+    document.body.removeChild(mask)
+    document.body.removeChild(select)
+    document.body.removeChild(btnGroup)
+  }
+  
+  // 确定按钮事件
+  confirmBtn.onclick = () => {
+    const targetEPSG = select.value
+    if (!targetEPSG) {
+      alert('请选择坐标系')
+      return
+    }
+    closeDialog()
+    
+    // 定义 EPSG:4547（如果尚未定义）
+    try {
+      if (!proj4.defs('EPSG:4547')) {
+        proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
+      }
+    } catch (e) {
+      console.log('EPSG:4547 已存在或定义失败')
+    }
+    
+    // 构建 GeoJSON
+    const geojson = {
+      type: 'FeatureCollection',
+      crs: {
+        type: 'name',
+        properties: {
+          name: targetEPSG
+        }
+      },
+      features: []
+    }
+    
+    for (const feature of features) {
+      const props = feature.getProperties()
+      const properties = {
+        name: props.name,
+        type: props.type,
+        admin_region: props.admin_region
+      }
+      if (layerType === 'points') {
+        properties.address = props.address
+        properties.capacity = props.capacity
+      } else {
+        properties.area = props.area
+      }
+      
+      let geom = feature.getGeometry()
+      let coordinates = geom.getCoordinates()
+      
+      // 坐标转换
+      if (targetEPSG === 'EPSG:4326') {
+        if (geom.getType() === 'Point') {
+          coordinates = toLonLat(coordinates)
+        } else if (geom.getType() === 'Polygon') {
+          coordinates = coordinates.map(ring =>
+            ring.map(coord => toLonLat(coord))
+          )
+        }
+      } else if (targetEPSG === 'EPSG:4547') {
+        if (geom.getType() === 'Point') {
+          const lonlat = toLonLat(coordinates)
+          console.log('原始经纬度:', lonlat)
+          const result = proj4('EPSG:4326', 'EPSG:4547', [lonlat[0], lonlat[1]])
+          console.log('转换后4547坐标:', result)
+          coordinates = result
+        } else if (geom.getType() === 'Polygon') {
+          coordinates = coordinates.map(ring =>
+            ring.map(coord => {
+              const lonlat = toLonLat(coord)
+              const result = proj4('EPSG:4326', 'EPSG:4547', [lonlat[0], lonlat[1]])
+              console.log('转换后4547坐标:', result)
+              return result
+            })
+          )
+        }
+      }
+      
+      const featureGeom = {
+        type: geom.getType(),
+        coordinates: coordinates
+      }
+      
+      geojson.features.push({
+        type: 'Feature',
+        geometry: featureGeom,
+        properties: properties
+      })
+    }
+    
+    // 下载文件
+    const dataStr = JSON.stringify(geojson, null, 2)
+    const blob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const timestamp = new Date().toISOString().slice(0,19).replace(/:/g, '-')
+    a.download = `${layerType === 'points' ? '设施点' : '设施用地'}_导出_${timestamp}.geojson`
+    a.href = url
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  
+  // 取消按钮事件
+  cancelBtn.onclick = closeDialog
+}
+
 
 // ========== 编辑功能 ==========
+
 // 操作编辑状态函数
 function toggleEditMode(feature) {
   if (!feature) return
