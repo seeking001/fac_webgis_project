@@ -720,7 +720,7 @@ function setupLandsModify(source) {
 
 // 退出编辑模式函数
 function exitEditMode(){
-  // 退出编辑时，如何几何被修改了，就恢复到编辑前状态
+  // 退出编辑时，如果几何被修改了，就恢复到编辑前状态
   if(originalGeometry.value && selectedFeature.value){
     // 获取当前正在编辑的要素
     const layerType = selectedFeature.value.layerType
@@ -1049,7 +1049,7 @@ async function deleteFeature(featureId) {
 // ========== 交互设置 ==========
 function setupMapInteractions() {
   map.on('click', (event) => {
-    if(showLandsForm.value || isDrawing.value || showPointForm.value) return
+    if(showLandsForm.value || isDrawing.value || showPointForm.value || isEditing.value) return
 
     const features = map.getFeaturesAtPixel(event.pixel)
 
@@ -1057,13 +1057,16 @@ function setupMapInteractions() {
       // 每次点击都重新获取要素属性
       const feature = features[0]
       const properties = feature.getProperties()
-      // 确保geometry属性已存在
-      selectedFeature.value = properties
-      popupPosition.value = { x: event.pixel[0] + 20, y: event.pixel[1] }
-      // 如果之前处于编辑模式，退出编辑
+      // 如果处于编辑模式且点击的要素是当前正在编辑的要素，则不做任何操作，保持编辑状态
+      if (isEditing.value && selectedFeature.value && selectedFeature.value.id === properties.id) {
+        return
+      }
+      // 如果之前处于编辑模式，且点击了其他要素，退出编辑
       if(isEditing.value){
         exitEditMode()
       }
+      selectedFeature.value = properties
+      popupPosition.value = { x: event.pixel[0] + 20, y: event.pixel[1] }
     } else {
       closePopup()
     }
@@ -1080,6 +1083,7 @@ function closePopup() {
   // 如何正在编辑模式，放弃编辑并恢复到编辑前状态
   if (isEditing.value) {
     exitEditMode()
+    return  // 编辑模式下不清空selectedFeature，确保弹窗数据正常
   }
   selectedFeature.value = null
   popupPosition.value = null
