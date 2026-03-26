@@ -220,6 +220,9 @@ import { createPoints, updatePoints, deletePoints, createLands, updateLands, del
 const mapContainer = ref(null)
 let map = null
 
+// 定义 EPSG:4547（确保全局可用）
+proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
+
 // 天地图密钥配置
 const TIANDITU_API_KEY = import.meta.env.VITE_TIANDITU_API_KEY
 
@@ -635,6 +638,13 @@ function landsDraw() {
 }
 
 // ========== 导入导出功能 ==========
+// 统一的坐标转换函数
+function convertCoordinate(coord, fromEPSG, toEPSG) {
+  if (fromEPSG === toEPSG) return coord
+  // 使用 proj4 转换
+  return proj4(fromEPSG, toEPSG, coord)
+}
+
 // 导入文件（触发文件选择）
 function handleImport(layerType) {
   importLayerType.value = layerType
@@ -664,7 +674,13 @@ function readGeoJSONFile(file) {
       // 过滤出符合几何类型的要素
       const validFeatures = features.filter(f => {
         const geomType = f.geometry?.type
-        return geomType === expectedType
+        if (layerType === 'lands') {
+          // 面图层：支持 Polygon 和 MultiPolygon
+          return geomType === 'Polygon' || geomType === 'MultiPolygon'
+        } else {
+          // 点图层：支持 Point 和 MultiPoint
+          return geomType === 'Point' || geomType === 'MultiPoint'
+        }
       })
       
       if (validFeatures.length === 0) {
@@ -744,99 +760,95 @@ function showCoordinateDialogForImport() {
 
 // 执行坐标转换并逐个导入
 async function importWithTransform(sourceEPSG) {
-  // 定义投影定义（如果尚未定义）
-  if (!proj4.defs('EPSG:4547')) {
+  if (sourceEPSG === 'EPSG:4547' && !proj4.defs('EPSG:4547')) {
     proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
   }
   
-  const targetEPSG = 'EPSG:4326'  // 数据库存储坐标系
+  const targetEPSG = 'EPSG:4326'
+  let successCount = 0
   
-  for (const feature of importFeatures.value) {
+  for (let i = 0; i < importFeatures.value.length; i++) {
+    const feature = importFeatures.value[i]
     let geom = feature.geometry
+    let geomType = geom.type
     let coordinates = geom.coordinates
+    
+    // 处理 MultiPolygon/MultiPoint
+    if (geomType === 'MultiPolygon') {
+      geomType = 'Polygon'
+      coordinates = coordinates[0]
+    }
+    if (geomType === 'MultiPoint') {
+      geomType = 'Point'
+      coordinates = coordinates[0]
+    }
     
     // 坐标转换
     if (sourceEPSG !== targetEPSG) {
-      if (geom.type === 'Point') {
-        const transformed = transform(coordinates, sourceEPSG, targetEPSG)
-        coordinates = transformed
-      } else if (geom.type === 'Polygon') {
-        coordinates = coordinates.map(ring =>
-          ring.map(coord => transform(coord, sourceEPSG, targetEPSG))
-        )
+      try {
+        if (geomType === 'Point') {
+          coordinates = proj4(sourceEPSG, targetEPSG, coordinates)
+        } else if (geomType === 'Polygon') {
+          coordinates = coordinates.map(ring =>
+            ring.map(coord => {
+              const result = proj4(sourceEPSG, targetEPSG, coord)
+              // 确保返回的是数组 [lng, lat]
+              return [result[0], result[1]]
+            })
+          )
+        }
+      } catch (err) {
+        console.error('坐标转换失败:', err)
+        alert('坐标转换失败，请检查源坐标系选择是否正确')
+        return
       }
     }
     
-    // 准备属性（留空）
+    // 提取属性
     const props = feature.properties || {}
     const layerType = importLayerType.value
     
-    let data = {}
+    // 准备表单数据
     if (layerType === 'points') {
-      data = {
+      pointsForm.value = {
         name: props.name || '',
         type: props.type || '',
         address: props.address || '',
         capacity: props.capacity || 0,
-        admin_region: props.admin_region || '',
-        geometry: {
-          type: geom.type,
-          coordinates: coordinates
-        }
-      }
-      try {
-        const response = await createPoints(data)
-        if (response.success) {
-          // 添加到地图和 store（简单做法：刷新图层）
-          // 为简化，直接重新加载当前图层的所有数据
-          const layerObj = layers.value[layerType]
-          if (layerObj.loaded) {
-            const bbox = getMapBbox(map)
-            if (layerType === 'points') {
-              await vectorStore.loadPoints(bbox)
-            } else {
-              await vectorStore.loadLands(bbox)
-            }
-            updateVectorLayer(layerType)
-          }
-        } else {
-          console.warn('导入失败:', response)
-        }
-      } catch (err) {
-        console.error('保存失败', err)
+        admin_region: props.admin_region || ''
       }
     } else {
-      data = {
+      landsForm.value = {
         name: props.name || '',
         type: props.type || '',
         admin_region: props.admin_region || '',
-        area: props.area || 0,
-        geometry: {
-          type: geom.type,
-          coordinates: coordinates
-        }
-      }
-      try {
-        const response = await createLands(data)
-        if (response.success) {
-          const layerObj = layers.value[layerType]
-          if (layerObj.loaded) {
-            const bbox = getMapBbox(map)
-            await vectorStore.loadLands(bbox)
-            updateVectorLayer(layerType)
-          }
-        } else {
-          console.warn('导入失败:', response)
-        }
-      } catch (err) {
-        console.error('保存失败', err)
+        area: props.area || 0
       }
     }
+    
+    // 存储临时几何信息
+    window._tempImportGeometry = { type: geomType, coordinates: coordinates, layerType: layerType }
+    
+    // 弹出表单
+    if (layerType === 'points') {
+      showPointForm.value = true
+    } else {
+      showLandsForm.value = true
+    }
+    
+    // 等待用户保存（通过修改保存函数处理导入）
+    await new Promise((resolve) => {
+      window._resolveImport = resolve
+    })
+    
+    successCount++
   }
   
-  alert(`成功导入 ${importFeatures.value.length} 个要素`)
+  alert(`成功导入 ${successCount} 个要素`)
   importFeatures.value = []
   importLayerType.value = null
+  delete window._tempImportGeometry
+  delete window._resolveImport
 }
 
 // 导出图层数据函数
@@ -1143,6 +1155,46 @@ async function savePointToDatabase() {
   try {
     if (!pointsForm.value.name) return
 
+    // 判断是否为导入模式
+    if (window._tempImportGeometry) {
+      const { type, coordinates, layerType } = window._tempImportGeometry
+      
+      if (!pointsForm.value.name) {
+        alert('请输入名称')
+        return
+      }
+      
+      let finalCoordinates = type === 'Point' 
+        ? [Number(coordinates[0]), Number(coordinates[1])]
+        : coordinates
+      
+      const response = await createPoints({
+        name: pointsForm.value.name,
+        type: pointsForm.value.type,
+        address: pointsForm.value.address,
+        capacity: pointsForm.value.capacity || 0,
+        admin_region: pointsForm.value.admin_region,
+        geometry: { type, coordinates: finalCoordinates }
+      })
+      
+      if (response.success) {
+        // 刷新图层
+        const layerObj = layers.value[layerType]
+        if (layerObj.loaded) {
+          const bbox = getMapBbox(map)
+          await vectorStore.loadPoints(bbox)
+          updateVectorLayer(layerType)
+        }
+        alert('导入成功！')
+        showPointForm.value = false
+        pointsForm.value = { name: '', type: '', address: '', capacity: null, admin_region: '' }
+        
+        // 触发下一个要素
+        if (window._resolveImport) window._resolveImport()
+      }
+      return
+    }
+
     // 判断是编辑还是新增
     if (selectedFeature.value && selectedFeature.value.id) {
       // ========== 编辑现有设施 ==========
@@ -1265,6 +1317,66 @@ async function savePointToDatabase() {
 async function saveLandsToDatabase() {
   try {
     if (!landsForm.value.name) return
+
+    // 判断是否为导入模式
+    if (window._tempImportGeometry) {
+      const { type, coordinates, layerType } = window._tempImportGeometry
+      
+      if (!landsForm.value.name) {
+        alert('请输入名称')
+        return
+      }
+      
+      // 【关键】确保坐标是数字类型，去除可能的多余维度
+      let finalCoordinates = coordinates
+      if (type === 'Polygon') {
+        finalCoordinates = coordinates.map(ring =>
+          ring.map(point => [Number(point[0]), Number(point[1])])
+        )
+      } else if (type === 'Point') {
+        finalCoordinates = [Number(coordinates[0]), Number(coordinates[1])]
+      }
+      
+      // 打印最终要发送的数据
+      const postData = {
+        name: landsForm.value.name,
+        type: landsForm.value.type,
+        admin_region: landsForm.value.admin_region,
+        area: landsForm.value.area || 0,
+        geometry: { 
+          type: type, 
+          coordinates: finalCoordinates 
+        }
+      }
+      console.log('发送数据:', JSON.stringify(postData, null, 2))
+      
+      try {
+        const response = await createLands(postData)
+        
+        if (response && response.success) {
+          // 刷新图层
+          const layerObj = layers.value[layerType]
+          if (layerObj && layerObj.loaded) {
+            const bbox = getMapBbox(map)
+            await vectorStore.loadLands(bbox)
+            updateVectorLayer(layerType)
+          }
+          alert('导入成功！')
+          showLandsForm.value = false
+          landsForm.value = { name: '', type: '', admin_region: '', area: null }
+          
+          delete window._tempImportGeometry
+          if (window._resolveImport) window._resolveImport()
+        } else {
+          console.error('导入失败:', response)
+          alert(`导入失败: ${response?.message || '未知错误'}`)
+        }
+      } catch (error) {
+        console.error('导入异常:', error)
+        alert(`导入异常: ${error.message}`)
+      }
+      return
+    }
 
     // 判断是编辑还是新增
     if (selectedFeature.value && selectedFeature.value.id) {
@@ -1463,6 +1575,15 @@ function closePopup() {
 }
 
 function cancelDraw() {
+  // 如果正在导入模式，跳过当前要素
+  if (window._tempImportGeometry && window._resolveImport) {
+    showLandsForm.value = false
+    showPointForm.value = false
+    window._resolveImport()  // 跳过当前要素，继续下一个
+    delete window._tempImportGeometry
+    return
+  }
+
   showLandsForm.value = false
   showPointForm.value = false
   landsForm.value = { name: '', type: '', admin_region: '', area: null }
