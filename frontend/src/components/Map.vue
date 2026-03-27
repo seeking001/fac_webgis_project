@@ -168,6 +168,11 @@
               <option value="居住用地">居住用地</option>
               <option value="工业用地">工业用地</option>
               <option value="公园绿地">公园绿地</option>
+              <option value="行政管理用地">行政管理用地 (GIC1)</option>
+              <option value="文体设施用地">文体设施用地 (GIC2)</option>
+              <option value="医疗卫生用地">医疗卫生用地 (GIC4)</option>
+              <option value="教育设施用地">教育设施用地 (GIC5)</option>
+              <option value="社会福利用地">社会福利用地 (GIC7)</option>
             </select>
           </div>
           <div class="form-group">
@@ -362,7 +367,12 @@ const layers = ref({
       { label: '商业用地', value: '商业用地' },
       { label: '居住用地', value: '居住用地' },
       { label: '工业用地', value: '工业用地' },
-      { label: '公园绿地', value: '公园绿地' }
+      { label: '公园绿地', value: '公园绿地' },
+      { label: '行政管理用地', value: '行政管理用地' },
+      { label: '文体设施用地', value: '文体设施用地' },
+      { label: '医疗卫生用地', value: '医疗卫生用地' },
+      { label: '教育设施用地', value: '教育设施用地' },
+      { label: '社会福利用地', value: '社会福利用地' }
     ]
   }
 })
@@ -496,7 +506,7 @@ function updateVectorLayer(layerKey) {
     source,
     style: styleFunc,
     visible: layerObj.visible,
-    zIndex: 2
+    zIndex: layerKey === 'points' ? 3 : 2
   })
   map.addLayer(layerObj.layer)
 
@@ -554,6 +564,11 @@ function createLandsStyle(feature) {
     case '商业用地': color = 'rgba(255, 0, 0, 0.6)'; break
     case '工业用地': color = 'rgba(187, 150, 116, 0.6)'; break
     case '公园绿地': color = 'rgba(0, 255, 0, 0.6)'; break
+    case '行政管理用地': color = 'rgba(254, 24, 201, 0.6)'; break
+    case '文体设施用地': color = 'rgba(254, 24, 201, 0.6)'; break
+    case '医疗卫生用地': color = 'rgba(254, 24, 201, 0.6)'; break
+    case '教育设施用地': color = 'rgba(254, 24, 201, 0.6)'; break
+    case '社会福利用地': color = 'rgba(254, 24, 201, 0.6)'; break
   }
 
   return new Style({
