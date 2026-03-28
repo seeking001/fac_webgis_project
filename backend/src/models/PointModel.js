@@ -9,11 +9,11 @@ class PointModel {
       SELECT
         id,
         name,
+        level,
         type,
+        floor_area,
+        scale,
         ST_AsGeoJSON(geom) as geometry,
-        address,
-        capacity,
-        admin_region,
         created_at
       FROM points
     `;
@@ -38,23 +38,22 @@ class PointModel {
 
   // 创建公共服务设施
   static async createPoints(data) {
-    const { name, type, address, capacity, admin_region, geometry } = data;
+    const { name, level, type, floor_area, scale, geometry } = data;
 
     const query = `
-    INSERT INTO points 
-      (name, type, address, capacity, admin_region, geom)
-    VALUES ($1, $2, $3, $4, $5, ST_SetSRID(ST_GeomFromGeoJSON($6), 4326))
-    RETURNING 
-      id, name, type, address, capacity, admin_region, 
-      ST_AsGeoJSON(geom) as geometry, created_at
-  `;
+      INSERT INTO points 
+        (name, level, type, floor_area, scale, geom)
+      VALUES ($1, $2, $3, $4, $5, ST_SetSRID(ST_GeomFromGeoJSON($6), 4326))
+      RETURNING 
+        id, name, level, type, floor_area, scale, ST_AsGeoJSON(geom) as geometry, created_at
+    `;
 
     const params = [
-      name || '未命名设施',
-      type || '学校',
-      address || '',
-      capacity || 0,
-      admin_region || '未知区域',
+      name || '设施名称',
+      level || '设施级别',
+      type || '设施类型',
+      floor_area || 0,
+      scale || 0,
       JSON.stringify(geometry)
     ];
 
@@ -74,29 +73,29 @@ class PointModel {
 
   // 更新公共服务设施
   static async updatePoints(id, data) {
-    const { name, type, address, capacity, admin_region, geometry } = data;
+    const { name, level, type, floor_area, scale, geometry } = data;
 
     const query = `
     UPDATE points
     SET
       name = COALESCE($1, name),
-      type = COALESCE($2, type),
-      address = COALESCE($3, address),
-      capacity = COALESCE($4, capacity),
-      admin_region = COALESCE($5, admin_region),
+      level = COALESCE($2, level),
+      type = COALESCE($3, type),
+      floor_area = COALESCE($4, floor_area),
+      scale = COALESCE($5, scale),
       geom = COALESCE(ST_SetSRID(ST_GeomFromGeoJSON($6), 4326), geom)
     WHERE id = $7
-    RETURNING 
-      id, name, type, address, capacity, admin_region, 
+    RETURNING
+      id, name, level, type, floor_area, scale,
       ST_AsGeoJSON(geom) as geometry, created_at
   `;
 
     const params = [
       name || null,
+      level || null,
       type || null,
-      address || null,
-      capacity || null,
-      admin_region || null,
+      floor_area || null,
+      scale || null,
       geometry ? JSON.stringify(geometry) : null,
       id
     ];

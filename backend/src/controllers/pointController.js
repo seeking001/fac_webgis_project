@@ -35,7 +35,7 @@ class PointController {
   // 创建公共服务设施
   static async createPoints(req, res) {
     try {
-      const { name, type, address, capacity, admin_region, geometry } = req.body;
+      const { name, level, type, floor_area, scale, geometry } = req.body;
 
       if (!name || !type || !geometry) {
         return res.status(400).json({
@@ -46,10 +46,10 @@ class PointController {
 
       const newPoint = await PointModel.createPoints({
         name,
+        level,
         type,
-        address: address || '',
-        capacity: capacity || 0,
-        admin_region: admin_region || '未知区域',
+        floor_area,
+        scale,
         geometry
       });
 
@@ -72,7 +72,7 @@ class PointController {
   static async updatePoints(req, res) {
     try {
       const { id } = req.params;
-      const { name, type, address, capacity, admin_region, geometry } = req.body;
+      const { name, level, type, floor_area, scale, geometry } = req.body;
 
       if (!id) {
         return res.status(400).json({
@@ -83,10 +83,10 @@ class PointController {
 
       const updatedPoints = await PointModel.updatePoints(id, {
         name,
+        level,
         type,
-        address,
-        capacity: capacity || 0,
-        admin_region: admin_region || '未知区域',
+        floor_area,
+        scale,
         geometry
       });
 
