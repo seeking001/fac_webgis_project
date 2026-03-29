@@ -59,6 +59,10 @@
     <!-- 右侧边栏：信息显示 -->
     <div class="right_sidebar">
       <h3>信息显示</h3>
+      <!-- 显示绘制提示 -->
+      <div v-if="isDrawing" class="draw-hint">
+        <p>正在绘制... 按 <kbd>ESC</kbd> 退出 | 按 <kbd>Ctrl+Z</kbd> 撤销上一点</p>
+      </div>
       <div class="status-info">
         <h4>加载状态</h4>
         <div v-for="(config, key) in layers">
@@ -648,6 +652,7 @@ function startDrawing(layerKey) {
   else if (layerKey === 'lands') landsDraw()
 }
 
+// 点绘制功能
 function pointDraw() {
   if (drawInteraction) map.removeInteraction(drawInteraction)
   
@@ -682,8 +687,18 @@ function pointDraw() {
   })
 
   map.addInteraction(drawInteraction)
+
+  // ESC键退出绘制
+  const escHandler = (e) => {
+    if (e.key === 'Escape' && isDrawing.value) {
+      cancelDraw()
+      document.removeEventListener('keydown', escHandler)
+    }
+  }
+  document.addEventListener('keydown', escHandler)
 }
 
+// 用地绘制功能
 function landsDraw() {
   if (drawInteraction) map.removeInteraction(drawInteraction)
   
@@ -714,6 +729,29 @@ function landsDraw() {
   })
 
   map.addInteraction(drawInteraction)
+  
+  const escHandler = (e) => {
+    if (e.key === 'Escape' && isDrawing.value) {
+      cancelDraw()
+    }
+  }
+  
+  // 【推荐】利用 OpenLayers 原生 Backspace 删除顶点
+  const undoHandler = (e) => {
+    if (e.ctrlKey && e.key === 'z' && isDrawing.value) {
+      e.preventDefault()
+      e.stopPropagation()
+      // 模拟 Backspace 键，触发 OpenLayers 的删除顶点功能
+      const backspaceEvent = new KeyboardEvent('keydown', { key: 'Backspace' })
+      document.dispatchEvent(backspaceEvent)
+    }
+  }
+  
+  document.addEventListener('keydown', escHandler)
+  document.addEventListener('keydown', undoHandler)
+  
+  window._drawEscHandler = escHandler
+  window._drawUndoHandler = undoHandler
 }
 
 // ========== 导入导出功能 ==========
@@ -1647,22 +1685,35 @@ function closePopup() {
   popupPosition.value = null
 }
 
+// 取消绘制函数
 function cancelDraw() {
   // 如果正在导入模式，跳过当前要素
   if (window._tempImportGeometry && window._resolveImport) {
     showLandsForm.value = false
     showPointForm.value = false
-    window._resolveImport()  // 跳过当前要素，继续下一个
+    const resolve = window._resolveImport
     delete window._tempImportGeometry
+    delete window._resolveImport
+    if (resolve) resolve()
     return
   }
-
+  
   showLandsForm.value = false
   showPointForm.value = false
-  landsForm.value = { name: '', type: '', admin_region: '', area: null }
-  pointsForm.value = { name: '', type: '', address: '', capacity: null, admin_region: '' }
+  landsForm.value = { name: '', type: '', site_area: null }
+  pointsForm.value = { name: '', level: '', type: '', floor_area: null, scale: null }
   drawFeature = null
   isDrawing.value = false
+  
+  // 【新增】清理绘制时的键盘监听
+  if (window._drawEscHandler) {
+    document.removeEventListener('keydown', window._drawEscHandler)
+    delete window._drawEscHandler
+  }
+  if (window._drawUndoHandler) {
+    document.removeEventListener('keydown', window._drawUndoHandler)
+    delete window._drawUndoHandler
+  }
   
   if (drawInteraction) {
     map.removeInteraction(drawInteraction)
@@ -1932,6 +1983,26 @@ onUnmounted(() => {
   padding: 0 20px;
   font-size: 20px;
   color: #eee;
+}
+
+.draw-hint {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  z-index: 1000;
+  pointer-events: none;
+}
+.draw-hint kbd {
+  background: #333;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin: 0 2px;
 }
 
 .status-info {
