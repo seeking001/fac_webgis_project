@@ -68,6 +68,24 @@
           <span v-else>◻️ {{ config.name }}: 未加载</span>
         </div>
       </div>
+      
+      <!-- 操作提示 -->
+      <div class="operation-hint" v-if="isDrawing || showPointForm || showLandsForm || selectedFeature">
+        <h4>操作提示</h4>
+        <div class="hint-content">
+          <!-- 绘制中 -->
+          <p v-if="isDrawing">
+            🔹 按 <kbd>Backspace</kbd> 撤销上一个顶点<br>
+            🔹 按 <kbd>Esc</kbd> 退出绘制
+          </p>
+          <!-- 选中要素 -->
+          <p v-else>
+            🔹 点击要素查看详情<br>
+            🔹 点击"编辑图形"可拖动顶点修改<br>
+            🔹 点击"删除设施/用地"可删除要素
+          </p>
+        </div>
+      </div>
     </div>
     
     <!-- 点击要素弹窗 -->
@@ -79,15 +97,14 @@
         <h4>{{ selectedFeature.name }}</h4>
         
         <div v-if="selectedFeature.layerType === 'points'">
-          <p><strong>类型：</strong>{{ selectedFeature.type }}</p>
-          <p><strong>地址：</strong>{{ selectedFeature.address }}</p>
-          <p><strong>建筑面积：</strong>{{ selectedFeature.capacity }}平方米</p>
-          <p><strong>行政区：</strong>{{ selectedFeature.admin_region }}</p>
+          <p><strong>设施级别：</strong>{{ selectedFeature.level }}</p>
+          <p><strong>设施类型：</strong>{{ selectedFeature.type }}</p>
+          <p><strong>建筑面积：</strong>{{ selectedFeature.floor_area }}平方米</p>
+          <p><strong>服务规模：</strong>{{ selectedFeature.scale }}座/床</p>
         </div>
         <div v-else>
           <p><strong>用地类型：</strong>{{ selectedFeature.type }}</p>
-          <p><strong>用地面积：</strong>{{ selectedFeature.area }}平方米</p>
-          <p><strong>行政区：</strong>{{ selectedFeature.admin_region }}</p>
+          <p><strong>用地面积：</strong>{{ selectedFeature.site_area }}平方米</p>
         </div>
         
         <div class="popup-buttons">
@@ -108,39 +125,59 @@
         <h4>{{ isEditing ? '编辑公共设施' : '添加公共设施' }}</h4>
         <form @submit.prevent="savePointToDatabase">
           <div class="form-group">
-            <label>名称：</label>
-            <input v-model="pointsForm.name" required placeholder="例如：龙华中学">
+            <label>设施名称：</label>
+            <input v-model="pointsForm.name" required placeholder="例如：玉龙学校">
           </div>
           <div class="form-group">
-            <label>类型：</label>
-            <select v-model="pointsForm.type" required>
-              <option value="">请选择类型</option>
-              <option value="学校">学校</option>
-              <option value="医院">医院</option>
-              <option value="图书馆">图书馆</option>
-              <option value="体育馆">体育馆</option>
-              <option value="公园">公园</option>
+            <label>设施级别：</label>
+            <select v-model="pointsForm.level" required>
+              <option value="">请选择级别</option>
+              <option value="区域级">区域级</option>
+              <option value="社区级">社区级</option>
             </select>
           </div>
           <div class="form-group">
-            <label>地址：</label>
-            <input v-model="pointsForm.address" required placeholder="详细地址">
+            <label>设施类型：</label>
+            <select v-model="pointsForm.type" required>
+              <option value="">请选择类型</option>
+              <!-- 新增类型 - 行政管理类 -->
+              <option value="行政办公场所">行政办公场所</option>
+              <option value="社区管理机构">社区管理机构</option>
+              <!-- 新增类型 - 文化体育类 -->
+              <option value="大型文化设施">大型文化设施</option>
+              <option value="大型体育设施">大型体育设施</option>
+              <option value="社区文化设施">社区文化设施</option>
+              <option value="社区体育设施">社区体育设施</option>
+              <!-- 新增类型 - 医疗卫生类 -->
+              <option value="医院">医院</option>
+              <option value="门诊部">门诊部</option>
+              <option value="社区健康服务中心">社区健康服务中心</option>
+              <!-- 新增类型 - 教育类 -->
+              <option value="幼儿园">幼儿园</option>
+              <option value="小学">小学</option>
+              <option value="初中">初中</option>
+              <option value="九年一贯制学校">九年一贯制学校</option>
+              <option value="高中">高中</option>
+              <option value="高等教育">高等教育</option>
+              <option value="职业教育">职业教育</option>
+              <!-- 新增类型 - 社会福利类 -->
+              <option value="养老院">养老院</option>
+              <option value="儿童福利院">儿童福利院</option>
+              <option value="残疾人服务中心">残疾人服务中心</option>
+              <option value="社区老年人日间照料中心">社区老年人日间照料中心</option>
+              <option value="社区托儿机构">社区托儿机构</option>
+              <option value="社区救助站">社区救助站</option>
+              <!-- 新增类型 - 其它类 -->
+              <option value="其它设施">其它设施</option>
+            </select>
           </div>
           <div class="form-group">
             <label>建筑面积（平方米）：</label>
-            <input v-model="pointsForm.capacity" type="number" required placeholder="手动输入">
+            <input v-model="pointsForm.floor_area" type="number" required placeholder="手动输入">
           </div>
           <div class="form-group">
-            <label>行政区：</label>
-            <select v-model="pointsForm.admin_region" required>
-              <option value="">请选择区域</option>
-              <option value="福田区">福田区</option>
-              <option value="南山区">南山区</option>
-              <option value="罗湖区">罗湖区</option>
-              <option value="宝安区">宝安区</option>
-              <option value="龙华区">龙华区</option>
-              <option value="光明区">光明区</option>
-            </select>
+            <label>服务规模（座/床）：</label>
+            <input v-model="pointsForm.scale" type="number" placeholder="手动输入">
           </div>
           <div class="form-buttons">
             <button type="button" @click="cancelDraw" class="btn-cancel">取消</button>
@@ -157,8 +194,8 @@
         <h4>{{ isEditing ? '编辑土地利用' : '添加土地利用' }}</h4>
         <form @submit.prevent="saveLandsToDatabase">
           <div class="form-group">
-            <label>名称：</label>
-            <input v-model="landsForm.name" type="text" placeholder="例如：福田居住区" required>
+            <label>设施名称：</label>
+            <input v-model="landsForm.name" type="text" placeholder="例如：玉龙学校" required>
           </div>
           <div class="form-group">
             <label>用地类型：</label>
@@ -168,23 +205,19 @@
               <option value="居住用地">居住用地</option>
               <option value="工业用地">工业用地</option>
               <option value="公园绿地">公园绿地</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>行政区：</label>
-            <select v-model="landsForm.admin_region" required>
-              <option value="">请选择区域</option>
-              <option value="福田区">福田区</option>
-              <option value="南山区">南山区</option>
-              <option value="罗湖区">罗湖区</option>
-              <option value="宝安区">宝安区</option>
-              <option value="龙华区">龙华区</option>
-              <option value="光明区">光明区</option>
+              <option value="行政管理用地">行政管理用地 (GIC1)</option>
+              <option value="文体设施用地">文体设施用地 (GIC2)</option>
+              <option value="医疗卫生用地">医疗卫生用地 (GIC4)</option>
+              <option value="教育设施用地">教育设施用地 (GIC5)</option>
+              <option value="社会福利用地">社会福利用地 (GIC7)</option>
             </select>
           </div>
           <div class="form-group">
             <label>用地面积（平方米）：</label>
-            <input v-model="landsForm.area" type="number" placeholder="手动输入" required>
+            <div style="display: flex; gap: 8px;">
+              <input v-model="landsForm.site_area" type="number" placeholder="手动输入" style="flex: 1;">
+              <button type="button" @click="calcArea" class="calc-btn">自动计算</button>
+            </div>
           </div>
           <div class="form-buttons">
             <button type="button" @click="cancelDraw" class="btn-cancel">取消</button>
@@ -308,16 +341,15 @@ const showImportConfirm = ref(false)       // 是否显示导入确认对话框
 // 表单数据
 const pointsForm = ref({
   name: '',
+  level: '',
   type: '',
-  address: '',
-  capacity: null,
-  admin_region: ''
+  floor_area: null,
+  scale: null
 })
 const landsForm = ref({
   name: '',
   type: '',
-  admin_region: '',
-  area: null
+  site_area: null
 })
 
 // 绘制相关
@@ -342,11 +374,35 @@ const layers = ref({
     // editable: false,
     types: [
       { label: '全部类型', value: 'all' },
-      { label: '学校', value: '学校' },
+      // 【新增类型 - 行政管理类】
+      { label: '行政办公场所', value: '行政办公场所' },
+      { label: '社区管理机构', value: '社区管理机构' },
+      // 【新增类型 - 文化体育类】
+      { label: '大型文化设施', value: '大型文化设施' },
+      { label: '大型体育设施', value: '大型体育设施' },
+      { label: '社区文化设施', value: '社区文化设施' },
+      { label: '社区体育设施', value: '社区体育设施' },
+      // 【新增类型 - 医疗卫生类】
       { label: '医院', value: '医院' },
-      { label: '图书馆', value: '图书馆' },
-      { label: '体育馆', value: '体育馆' },
-      { label: '公园', value: '公园' }
+      { label: '门诊部', value: '门诊部' },
+      { label: '社区健康服务中心', value: '社区健康服务中心' },
+      // 【新增类型 - 教育类】
+      { label: '幼儿园', value: '幼儿园' },
+      { label: '小学', value: '小学' },
+      { label: '初中', value: '初中' },
+      { label: '九年一贯制学校', value: '九年一贯制学校' },
+      { label: '高中', value: '高中' },
+      { label: '高等教育', value: '高等教育' },
+      { label: '职业教育', value: '职业教育' },
+      // 【新增类型 - 社会福利类】
+      { label: '养老院', value: '养老院' },
+      { label: '儿童福利院', value: '儿童福利院' },
+      { label: '残疾人服务中心', value: '残疾人服务中心' },
+      { label: '社区老年人日间照料中心', value: '社区老年人日间照料中心' },
+      { label: '社区托儿机构', value: '社区托儿机构' },
+      { label: '社区救助站', value: '社区救助站' },
+      // 【新增类型 - 其它类】
+      { label: '其它设施', value: '其它设施' }
     ]
   },
   lands: {
@@ -362,7 +418,12 @@ const layers = ref({
       { label: '商业用地', value: '商业用地' },
       { label: '居住用地', value: '居住用地' },
       { label: '工业用地', value: '工业用地' },
-      { label: '公园绿地', value: '公园绿地' }
+      { label: '公园绿地', value: '公园绿地' },
+      { label: '行政管理用地', value: '行政管理用地' },
+      { label: '文体设施用地', value: '文体设施用地' },
+      { label: '医疗卫生用地', value: '医疗卫生用地' },
+      { label: '教育设施用地', value: '教育设施用地' },
+      { label: '社会福利用地', value: '社会福利用地' }
     ]
   }
 })
@@ -371,6 +432,39 @@ const layers = ref({
 const pointsCount = computed(() => vectorStore.points.length)
 const landsCount = computed(() => vectorStore.lands.length)
 const getActiveBasemap = computed(() => basemaps.value.find(b => b.id === activeBasemapId.value))
+
+// 自动计算用地面积函数
+function calcArea() {
+  let mapFeature = null
+  
+  // 编辑模式：从地图图层获取
+  if (selectedFeature.value && selectedFeature.value.layerType === 'lands') {
+    const source = layers.value.lands.layer?.getSource()
+    mapFeature = source?.getFeatures().find(f => f.get('id') === selectedFeature.value.id)
+  }
+  
+  // 绘制模式：使用 drawFeature
+  if (!mapFeature && drawFeature) {
+    mapFeature = drawFeature
+  }
+  
+  if (!mapFeature) {
+    alert('请先绘制或选择用地')
+    return
+  }
+  
+  const geometry = mapFeature.getGeometry()
+  if (!geometry) return
+  
+  const area = Math.round(geometry.getArea())
+  
+  // 直接赋值
+  landsForm.value.site_area = area
+  
+  // 强制触发更新
+  landsForm.value = { ...landsForm.value }
+}
+
 
 // ========== 地图初始化 ==========
 const initMap = () => {
@@ -474,18 +568,31 @@ function updateVectorLayer(layerKey) {
       ? new Point(fromLonLat(item.geometry.coordinates))
       : new Polygon(item.geometry.coordinates).transform('EPSG:4326', 'EPSG:3857')
     
-    const feature = new Feature({
-      geometry: geom,
-      id: item.id,
-      name: item.name,
-      type: item.type,
-      layerType: layerKey,
-      address: item.address,
-      capacity: item.capacity,
-      admin_region: item.admin_region,
-      area: item.area
-    })
-    source.addFeature(feature)
+    if (isPoint) {
+      // 点要素
+      const feature = new Feature({
+        geometry: geom,
+        id: item.id,
+        name: item.name,
+        level: item.level,
+        type: item.type,
+        layerType: layerKey,
+        floor_area: item.floor_area,
+        scale: item.scale
+      });
+      source.addFeature(feature)
+    } else {
+      // 面要素
+      const feature = new Feature({
+        geometry: geom,
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        layerType: layerKey,
+        site_area: item.site_area
+      });
+      source.addFeature(feature)
+    }
   })
 
   // 移除旧图层
@@ -496,7 +603,7 @@ function updateVectorLayer(layerKey) {
     source,
     style: styleFunc,
     visible: layerObj.visible,
-    zIndex: 2
+    zIndex: layerKey === 'points' ? 3 : 2
   })
   map.addLayer(layerObj.layer)
 
@@ -513,14 +620,35 @@ function updateVectorLayer(layerKey) {
 function createPointsStyle(feature) {
   const type = feature.get('type')
   const icons = {
-    学校: '🎓',
+    // 【新增图标 - 行政管理类】
+    行政办公场所: '🏛️',
+    社区管理机构: '🏢',
+    // 【新增图标 - 文化体育类】
+    大型文化设施: '🏫',
+    大型体育设施: '🏟️',
+    社区文化设施: '🎨',
+    社区体育设施: '🏀',
+    // 【新增图标 - 医疗卫生类】
     医院: '🏥',
-    图书馆: '📖',
-    体育馆: '🏀',
-    公园: '🌳',
-    警察局: '👮',
-    消防站: '🚒',
-    停车场: '🅿️'
+    门诊部: '💊',
+    社区健康服务中心: '❤️',
+    // 【新增图标 - 教育类】
+    幼儿园: '🌈',
+    小学: '✏️',
+    初中: '📙',
+    九年一贯制学校: '📘',
+    高中: '📚',
+    高等教育: '🎓',
+    职业教育: '💻',
+    // 【新增图标 - 社会福利类】
+    养老院: '🏠',
+    儿童福利院: '🛝',
+    残疾人服务中心: '♿',
+    社区老年人日间照料中心: '🍵',
+    社区托儿机构: '🍼',
+    社区救助站: '🤝',
+    // 【新增图标 - 其它类】
+    其它设施: '📍'
   }
   const icon = icons[type] || '📍'
   const name = feature.get('name') || ''
@@ -554,6 +682,11 @@ function createLandsStyle(feature) {
     case '商业用地': color = 'rgba(255, 0, 0, 0.6)'; break
     case '工业用地': color = 'rgba(187, 150, 116, 0.6)'; break
     case '公园绿地': color = 'rgba(0, 255, 0, 0.6)'; break
+    case '行政管理用地': color = 'rgba(254, 24, 201, 0.6)'; break
+    case '文体设施用地': color = 'rgba(254, 24, 201, 0.6)'; break
+    case '医疗卫生用地': color = 'rgba(254, 24, 201, 0.6)'; break
+    case '教育设施用地': color = 'rgba(254, 24, 201, 0.6)'; break
+    case '社会福利用地': color = 'rgba(254, 24, 201, 0.6)'; break
   }
 
   return new Style({
@@ -565,10 +698,20 @@ function createLandsStyle(feature) {
 
 // ========== 绘制功能 ==========
 function startDrawing(layerKey) {
-  if (layerKey === 'points') pointDraw()
-  else if (layerKey === 'lands') landsDraw()
+  if (layerKey === 'points') {
+    pointsForm.value = { name: '', level: '', type: '', floor_area: null, scale: null }
+  } else if (layerKey === 'lands') {
+    landsForm.value = { name: '', type: '', site_area: null }
+  }
+  
+  if (layerKey === 'points') {
+    pointDraw()
+  } else if (layerKey === 'lands') {
+    landsDraw()
+  }
 }
 
+// 点绘制功能
 function pointDraw() {
   if (drawInteraction) map.removeInteraction(drawInteraction)
   
@@ -603,11 +746,21 @@ function pointDraw() {
   })
 
   map.addInteraction(drawInteraction)
+
+  // ESC键退出绘制
+  const escHandler = (e) => {
+    if (e.key === 'Escape' && isDrawing.value) {
+      cancelDraw()
+      document.removeEventListener('keydown', escHandler)
+    }
+  }
+  document.addEventListener('keydown', escHandler)
 }
 
+// 用地绘制功能
 function landsDraw() {
   if (drawInteraction) map.removeInteraction(drawInteraction)
-  
+
   isDrawing.value = true
   
   const source = new VectorSource()
@@ -635,6 +788,30 @@ function landsDraw() {
   })
 
   map.addInteraction(drawInteraction)
+
+  // Backspace键删除顶点
+  const backspaceHandler = (e) => {
+    if (e.key === 'Backspace' && isDrawing.value) {
+      e.preventDefault()
+      // 调用 Draw 交互的 removeLastPoint 方法
+      if (drawInteraction && typeof drawInteraction.removeLastPoint === 'function') {
+        drawInteraction.removeLastPoint()
+      }
+    }
+  }
+  
+  // Esc键退出绘制
+  const escHandler = (e) => {
+    if (e.key === 'Escape' && isDrawing.value) {
+      cancelDraw()
+    }
+  }
+  
+  document.addEventListener('keydown', backspaceHandler)
+  document.addEventListener('keydown', escHandler)
+  
+  window._drawBackspaceHandler = backspaceHandler
+  window._drawEscHandler = escHandler
 }
 
 // ========== 导入导出功能 ==========
@@ -812,17 +989,16 @@ async function importWithTransform(sourceEPSG) {
     if (layerType === 'points') {
       pointsForm.value = {
         name: props.name || '',
+        level: props.level || '',
         type: props.type || '',
-        address: props.address || '',
-        capacity: props.capacity || 0,
-        admin_region: props.admin_region || ''
+        floor_area: props.floor_area || null,
+        scale: props.scale || null
       }
     } else {
       landsForm.value = {
         name: props.name || '',
         type: props.type || '',
-        admin_region: props.admin_region || '',
-        area: props.area || 0
+        site_area: props.site_area || null
       }
     }
     
@@ -1131,18 +1307,17 @@ function openEditForm(feature) {
   if (feature.layerType === 'points') {
     pointsForm.value = {
       name: feature.name || '',
+      level: feature.level || '',
       type: feature.type || '',
-      address: feature.address || '',
-      capacity: feature.capacity || null,
-      admin_region: feature.admin_region || ''
+      floor_area: feature.floor_area || null,
+      scale: feature.scale || null
     }
     showPointForm.value = true
   } else {
     landsForm.value = {
       name: feature.name || '',
       type: feature.type || '',
-      admin_region: feature.admin_region || '',
-      area: feature.area || null
+      site_area: feature.site_area || null
     }
     showLandsForm.value = true
   }
@@ -1170,10 +1345,10 @@ async function savePointToDatabase() {
       
       const response = await createPoints({
         name: pointsForm.value.name,
+        level: pointsForm.value.level,
         type: pointsForm.value.type,
-        address: pointsForm.value.address,
-        capacity: pointsForm.value.capacity || 0,
-        admin_region: pointsForm.value.admin_region,
+        floor_area: pointsForm.value.floor_area || 0,
+        scale: pointsForm.value.scale || 0,
         geometry: { type, coordinates: finalCoordinates }
       })
       
@@ -1216,10 +1391,10 @@ async function savePointToDatabase() {
 
       const updateData = {
         name: pointsForm.value.name,
+        level: pointsForm.value.level,
         type: pointsForm.value.type,
-        address: pointsForm.value.address,
-        capacity: pointsForm.value.capacity || 0,
-        admin_region: pointsForm.value.admin_region,
+        floor_area: pointsForm.value.floor_area || 0,
+        scale: pointsForm.value.scale || 0,
         geometry: geometry
       }
 
@@ -1234,10 +1409,10 @@ async function savePointToDatabase() {
 
           // 更新属性
           feature.set('name', pointsForm.value.name)
+          feature.set('level', pointsForm.value.level)
           feature.set('type', pointsForm.value.type)
-          feature.set('address', pointsForm.value.address)
-          feature.set('capacity', pointsForm.value.capacity)
-          feature.set('admin_region', pointsForm.value.admin_region)
+          feature.set('floor_area', pointsForm.value.floor_area)
+          feature.set('scale', pointsForm.value.scale)
         }
 
         // 更新 store
@@ -1279,10 +1454,10 @@ async function savePointToDatabase() {
 
       const response = await createPoints({
         name: pointsForm.value.name,
+        level: pointsForm.value.level,
         type: pointsForm.value.type,
-        address: pointsForm.value.address,
-        capacity: pointsForm.value.capacity || 0,
-        admin_region: pointsForm.value.admin_region,
+        floor_area: pointsForm.value.floor_area || 0,
+        scale: pointsForm.value.scale || 0,
         geometry: {
           type: 'Point',
           coordinates: toLonLat(drawFeature.getGeometry().getCoordinates())
@@ -1294,10 +1469,10 @@ async function savePointToDatabase() {
         const newFeature = drawFeature.clone()
         newFeature.set('id', response.data.id)
         newFeature.set('name', pointsForm.value.name)
+        newFeature.set('level', pointsForm.value.level)
         newFeature.set('type', pointsForm.value.type)
-        newFeature.set('address', pointsForm.value.address)
-        newFeature.set('capacity', pointsForm.value.capacity)
-        newFeature.set('admin_region', pointsForm.value.admin_region)
+        newFeature.set('floor_area', pointsForm.value.floor_area)
+        newFeature.set('scale', pointsForm.value.scale)
         newFeature.set('layerType', 'points')
 
         layers.value.points.layer?.getSource()?.addFeature(newFeature)
@@ -1341,8 +1516,7 @@ async function saveLandsToDatabase() {
       const postData = {
         name: landsForm.value.name,
         type: landsForm.value.type,
-        admin_region: landsForm.value.admin_region,
-        area: landsForm.value.area || 0,
+        site_area: landsForm.value.site_area || 0,
         geometry: { 
           type: type, 
           coordinates: finalCoordinates 
@@ -1363,7 +1537,7 @@ async function saveLandsToDatabase() {
           }
           alert('导入成功！')
           showLandsForm.value = false
-          landsForm.value = { name: '', type: '', admin_region: '', area: null }
+          landsForm.value = { name: '', type: '', site_area: null }
           
           delete window._tempImportGeometry
           if (window._resolveImport) window._resolveImport()
@@ -1403,8 +1577,7 @@ async function saveLandsToDatabase() {
       const updateData = {
         name: landsForm.value.name,
         type: landsForm.value.type,
-        admin_region: landsForm.value.admin_region,
-        area: landsForm.value.area || 0,
+        site_area: landsForm.value.site_area || 0,
         geometry: geometry
       }
 
@@ -1415,8 +1588,7 @@ async function saveLandsToDatabase() {
         if (feature) {
           feature.set('name', landsForm.value.name)
           feature.set('type', landsForm.value.type)
-          feature.set('admin_region', landsForm.value.admin_region)
-          feature.set('area', landsForm.value.area)
+          feature.set('site_area', landsForm.value.site_area)
         }
 
         // 更新 store
@@ -1459,14 +1631,13 @@ async function saveLandsToDatabase() {
       const response = await createLands({
         name: landsForm.value.name,
         type: landsForm.value.type,
+        site_area: landsForm.value.site_area || 0,
         geometry: {
           type: 'Polygon',
           coordinates: drawFeature.getGeometry().getCoordinates().map(ring =>
             ring.map(coord => toLonLat(coord))
           )
-        },
-        area: landsForm.value.area || 0,
-        admin_region: landsForm.value.admin_region || '龙华区'
+        }
       })
 
       if (response.success) {
@@ -1475,8 +1646,7 @@ async function saveLandsToDatabase() {
         newFeature.set('id', response.data.id)
         newFeature.set('name', landsForm.value.name)
         newFeature.set('type', landsForm.value.type)
-        newFeature.set('admin_region', landsForm.value.admin_region)
-        newFeature.set('area', landsForm.value.area)
+        newFeature.set('site_area', landsForm.value.site_area)
         newFeature.set('layerType', 'lands')
 
         layers.value.lands.layer?.getSource()?.addFeature(newFeature)
@@ -1574,27 +1744,41 @@ function closePopup() {
   popupPosition.value = null
 }
 
+// 取消绘制函数
 function cancelDraw() {
   // 如果正在导入模式，跳过当前要素
   if (window._tempImportGeometry && window._resolveImport) {
     showLandsForm.value = false
     showPointForm.value = false
-    window._resolveImport()  // 跳过当前要素，继续下一个
+    const resolve = window._resolveImport
     delete window._tempImportGeometry
+    delete window._resolveImport
+    if (resolve) resolve()
     return
   }
-
+  
   showLandsForm.value = false
   showPointForm.value = false
-  landsForm.value = { name: '', type: '', admin_region: '', area: null }
-  pointsForm.value = { name: '', type: '', address: '', capacity: null, admin_region: '' }
+  landsForm.value = { name: '', type: '', site_area: null }
+  pointsForm.value = { name: '', level: '', type: '', floor_area: null, scale: null }
   drawFeature = null
   isDrawing.value = false
   
+  if (window._drawEscHandler) {
+    document.removeEventListener('keydown', window._drawEscHandler)
+    delete window._drawEscHandler
+  }
+
+  if (window._drawBackspaceHandler) {
+    document.removeEventListener('keydown', window._drawBackspaceHandler)
+    delete window._drawBackspaceHandler
+  }
+
   if (drawInteraction) {
     map.removeInteraction(drawInteraction)
     drawInteraction = null
   }
+
   if (drawLayer) {
     map.removeLayer(drawLayer)
     drawLayer = null
@@ -1608,15 +1792,22 @@ onMounted(() => {
 
   // 添加ECS键盘监听
   escHandler = (e) => {
-    if (e.key === 'Escape' && isEditing.value) {
-      // 只在图形编辑模式且没有打开表单时处理
-      if(isEditing.value && !showPointForm.value && !showLandsForm.value) {
+    if (e.key === 'Escape') {
+      // 表单弹窗优先
+      if (showPointForm.value || showLandsForm.value) {
+        cancelDraw()
+      } 
+      // 几何编辑模式
+      else if (isEditing.value) {
         exitEditMode()
         closePopup()
       }
     }
   }
   document.addEventListener('keydown', escHandler)
+
+  // 调试：将 store 挂载到 window
+  window.debugStore = vectorStore
 })
 
 onUnmounted(() => {
@@ -1877,8 +2068,38 @@ onUnmounted(() => {
 }
 
 .status-info div {
-  margin: 1px 0;
+  padding: 3px;
+  font-size: 14px;
   color: #52c41a;
+}
+
+/* 操作提示样式 */
+.operation-hint {
+  position: absolute;
+  bottom: 88px;
+  width: 300px;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.operation-hint h4 {
+  padding: 3px 5px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 16px;
+  color: #ccc;
+  margin: 0;
+}
+
+.hint-content {
+  padding: 3px;
+  font-size: 14px;
+  color: #52c41a;
+}
+
+.hint-content kbd {
+  padding: 3px;
+  font-size: 14px;
+  color: #ffd966;
 }
 
 /* 要素弹窗样式 */
@@ -2018,6 +2239,28 @@ onUnmounted(() => {
   padding: 8px;
   border: 1px solid #ddd;
   border-radius: 3px;
+}
+
+/* 自动计算样式 */
+.calc-btn {
+  padding: 8px 12px;
+  background: #67c23a;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.calc-btn:hover {
+  background: #5daf34;
+}
+
+.area-hint {
+  margin-top: 5px;
+  font-size: 12px;
+  color: #67c23a;
 }
 
 .form-buttons {

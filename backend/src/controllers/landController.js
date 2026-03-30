@@ -36,7 +36,7 @@ class landController {
   // 创建土地利用数据
   static async createLands(req, res) {
     try {
-      const { name, type, area, admin_region, geometry } = req.body;
+      const { name, type, site_area, geometry } = req.body;
 
       // 验证必要字段
       if (!name || !type || !geometry) {
@@ -50,8 +50,7 @@ class landController {
       const newLand = await landModel.createLands({
         name,
         type,
-        area: area || 0,
-        admin_region: admin_region || '未知区域',
+        site_area,
         geometry
       });
 
@@ -74,7 +73,7 @@ class landController {
   static async updateLands(req, res) {
     try {
       const { id } = req.params;
-      const { name, type, area, admin_region, geometry } = req.body;
+      const { name, type, site_area, geometry } = req.body;
 
       // 验证必要字段
       if (!id || !name || !type || !geometry) {
@@ -88,8 +87,7 @@ class landController {
       const updatedLands = await landModel.updateLands(id, {
         name,
         type,
-        area: area || 0,
-        admin_region: admin_region || '未知区域',
+        site_area,
         geometry
       });
 

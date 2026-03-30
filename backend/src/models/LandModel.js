@@ -10,9 +10,8 @@ class landModel {
         id,
         name,
         type,
+        site_area,
         ST_AsGeoJSON(geom) as geometry,
-        area,
-        admin_region,
         created_at
       FROM lands
     `;
@@ -37,15 +36,15 @@ class landModel {
 
   // 添加土地利用数据
   static async createLands(data) {
-    const { name, type, area, admin_region, geometry } = data;
+    const { name, type, site_area, geometry } = data;
 
     const query = `
-      INSERT INTO lands (name, type, area, admin_region, geom)
-      VALUES ($1, $2, $3, $4, ST_SetSRID(ST_GeomFromGeoJSON($5), 4326))
-      RETURNING id, name, type, area, admin_region, ST_AsGeoJSON(geom) as geometry, created_at
+      INSERT INTO lands (name, type, site_area, geom)
+      VALUES ($1, $2, $3, ST_SetSRID(ST_GeomFromGeoJSON($4), 4326))
+      RETURNING id, name, type, site_area, ST_AsGeoJSON(geom) as geometry, created_at
     `;
 
-    const params = [name, type, area || 0, admin_region || '未知区域', JSON.stringify(geometry)];
+    const params = [name, type, site_area || 0, JSON.stringify(geometry)];
 
     try {
       const result = await pool.query(query, params);
@@ -63,21 +62,20 @@ class landModel {
 
   // 更新土地利用数据
   static async updateLands(id, data) {
-    const { name, type, area, admin_region, geometry } = data;
+    const { name, type, site_area, geometry } = data;
 
     const query = `
       UPDATE lands
       SET
         name = $1,
         type = $2,
-        area = $3,
-        admin_region = $4,
-        geom = ST_SetSRID(ST_GeomFromGeoJSON($5), 4326)
-      WHERE id = $6
-      RETURNING id, name, type, area, admin_region, ST_AsGeoJSON(geom) as geometry, created_at
+        site_area = $3,
+        geom = ST_SetSRID(ST_GeomFromGeoJSON($4), 4326)
+      WHERE id = $5
+      RETURNING id, name, type, site_area, ST_AsGeoJSON(geom) as geometry, created_at
     `;
 
-    const params = [name, type, area || 0, admin_region || '未知区域', JSON.stringify(geometry), id];
+    const params = [name, type, site_area || 0, JSON.stringify(geometry), id];
 
     try {
       const result = await pool.query(query, params);
