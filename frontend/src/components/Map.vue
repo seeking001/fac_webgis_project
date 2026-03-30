@@ -75,13 +75,13 @@
         <div class="hint-content">
           <!-- 绘制中 -->
           <p v-if="isDrawing">
-            🔹 按 <kbd>Backspace</kbd> 删除上一点<br>
-            🔹 按 <kbd>ESC</kbd> 退出绘制
+            🔹 按 <kbd>Backspace</kbd> 撤销上一个顶点<br>
+            🔹 按 <kbd>Esc</kbd> 退出绘制
           </p>
           <!-- 选中要素 -->
           <p v-else>
             🔹 点击要素查看详情<br>
-            🔹 点击"编辑图形"可拖动修改顶点<br>
+            🔹 点击"编辑图形"可拖动顶点修改<br>
             🔹 点击"删除设施/用地"可删除要素
           </p>
         </div>
@@ -214,7 +214,10 @@
           </div>
           <div class="form-group">
             <label>用地面积（平方米）：</label>
-            <input v-model="landsForm.site_area" type="number" placeholder="手动输入" required>
+            <div style="display: flex; gap: 8px;">
+              <input v-model="landsForm.site_area" type="number" placeholder="手动输入" style="flex: 1;">
+              <button type="button" @click="calcArea" class="calc-btn">自动计算</button>
+            </div>
           </div>
           <div class="form-buttons">
             <button type="button" @click="cancelDraw" class="btn-cancel">取消</button>
@@ -429,6 +432,39 @@ const layers = ref({
 const pointsCount = computed(() => vectorStore.points.length)
 const landsCount = computed(() => vectorStore.lands.length)
 const getActiveBasemap = computed(() => basemaps.value.find(b => b.id === activeBasemapId.value))
+
+// 自动计算用地面积函数
+function calcArea() {
+  let mapFeature = null
+  
+  // 编辑模式：从地图图层获取
+  if (selectedFeature.value && selectedFeature.value.layerType === 'lands') {
+    const source = layers.value.lands.layer?.getSource()
+    mapFeature = source?.getFeatures().find(f => f.get('id') === selectedFeature.value.id)
+  }
+  
+  // 绘制模式：使用 drawFeature
+  if (!mapFeature && drawFeature) {
+    mapFeature = drawFeature
+  }
+  
+  if (!mapFeature) {
+    alert('请先绘制或选择用地')
+    return
+  }
+  
+  const geometry = mapFeature.getGeometry()
+  if (!geometry) return
+  
+  const area = Math.round(geometry.getArea())
+  
+  // 直接赋值
+  landsForm.value.site_area = area
+  
+  // 强制触发更新
+  landsForm.value = { ...landsForm.value }
+}
+
 
 // ========== 地图初始化 ==========
 const initMap = () => {
@@ -662,8 +698,17 @@ function createLandsStyle(feature) {
 
 // ========== 绘制功能 ==========
 function startDrawing(layerKey) {
-  if (layerKey === 'points') pointDraw()
-  else if (layerKey === 'lands') landsDraw()
+  if (layerKey === 'points') {
+    pointsForm.value = { name: '', level: '', type: '', floor_area: null, scale: null }
+  } else if (layerKey === 'lands') {
+    landsForm.value = { name: '', type: '', site_area: null }
+  }
+  
+  if (layerKey === 'points') {
+    pointDraw()
+  } else if (layerKey === 'lands') {
+    landsDraw()
+  }
 }
 
 // 点绘制功能
@@ -944,17 +989,16 @@ async function importWithTransform(sourceEPSG) {
     if (layerType === 'points') {
       pointsForm.value = {
         name: props.name || '',
+        level: props.level || '',
         type: props.type || '',
-        address: props.address || '',
-        capacity: props.capacity || 0,
-        admin_region: props.admin_region || ''
+        floor_area: props.floor_area || null,
+        scale: props.scale || null
       }
     } else {
       landsForm.value = {
         name: props.name || '',
         type: props.type || '',
-        admin_region: props.admin_region || '',
-        area: props.area || 0
+        site_area: props.site_area || null
       }
     }
     
@@ -1533,7 +1577,7 @@ async function saveLandsToDatabase() {
       const updateData = {
         name: landsForm.value.name,
         type: landsForm.value.type,
-        site_area: landsForm.value.area || 0,
+        site_area: landsForm.value.site_area || 0,
         geometry: geometry
       }
 
@@ -1761,6 +1805,9 @@ onMounted(() => {
     }
   }
   document.addEventListener('keydown', escHandler)
+
+  // 调试：将 store 挂载到 window
+  window.debugStore = vectorStore
 })
 
 onUnmounted(() => {
@@ -2050,7 +2097,7 @@ onUnmounted(() => {
 }
 
 .hint-content kbd {
-  padding: 0 3px;
+  padding: 3px;
   font-size: 14px;
   color: #ffd966;
 }
@@ -2192,6 +2239,28 @@ onUnmounted(() => {
   padding: 8px;
   border: 1px solid #ddd;
   border-radius: 3px;
+}
+
+/* 自动计算样式 */
+.calc-btn {
+  padding: 8px 12px;
+  background: #67c23a;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.calc-btn:hover {
+  background: #5daf34;
+}
+
+.area-hint {
+  margin-top: 5px;
+  font-size: 12px;
+  color: #67c23a;
 }
 
 .form-buttons {
