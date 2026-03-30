@@ -59,10 +59,6 @@
     <!-- 右侧边栏：信息显示 -->
     <div class="right_sidebar">
       <h3>信息显示</h3>
-      <!-- 显示绘制提示 -->
-      <div v-if="isDrawing" class="draw-hint">
-        <p>正在绘制... 按 <kbd>ESC</kbd> 退出 | 按 <kbd>Ctrl+Z</kbd> 撤销上一点</p>
-      </div>
       <div class="status-info">
         <h4>加载状态</h4>
         <div v-for="(config, key) in layers">
@@ -70,6 +66,24 @@
             ✅ {{ config.name }}: {{ key === 'points' ? pointsCount : landsCount }} 个
           </span>
           <span v-else>◻️ {{ config.name }}: 未加载</span>
+        </div>
+      </div>
+      
+      <!-- 操作提示 -->
+      <div class="operation-hint" v-if="isDrawing || showPointForm || showLandsForm || selectedFeature">
+        <h4>操作提示</h4>
+        <div class="hint-content">
+          <!-- 绘制中 -->
+          <p v-if="isDrawing">
+            🔹 按 <kbd>Backspace</kbd> 删除上一点<br>
+            🔹 按 <kbd>ESC</kbd> 退出绘制
+          </p>
+          <!-- 选中要素 -->
+          <p v-else>
+            🔹 点击要素查看详情<br>
+            🔹 点击"编辑图形"可拖动修改顶点<br>
+            🔹 点击"删除设施/用地"可删除要素
+          </p>
         </div>
       </div>
     </div>
@@ -701,7 +715,7 @@ function pointDraw() {
 // 用地绘制功能
 function landsDraw() {
   if (drawInteraction) map.removeInteraction(drawInteraction)
-  
+
   isDrawing.value = true
   
   const source = new VectorSource()
@@ -729,29 +743,30 @@ function landsDraw() {
   })
 
   map.addInteraction(drawInteraction)
+
+  // Backspace键删除顶点
+  const backspaceHandler = (e) => {
+    if (e.key === 'Backspace' && isDrawing.value) {
+      e.preventDefault()
+      // 调用 Draw 交互的 removeLastPoint 方法
+      if (drawInteraction && typeof drawInteraction.removeLastPoint === 'function') {
+        drawInteraction.removeLastPoint()
+      }
+    }
+  }
   
+  // Esc键退出绘制
   const escHandler = (e) => {
     if (e.key === 'Escape' && isDrawing.value) {
       cancelDraw()
     }
   }
   
-  // 【推荐】利用 OpenLayers 原生 Backspace 删除顶点
-  const undoHandler = (e) => {
-    if (e.ctrlKey && e.key === 'z' && isDrawing.value) {
-      e.preventDefault()
-      e.stopPropagation()
-      // 模拟 Backspace 键，触发 OpenLayers 的删除顶点功能
-      const backspaceEvent = new KeyboardEvent('keydown', { key: 'Backspace' })
-      document.dispatchEvent(backspaceEvent)
-    }
-  }
-  
+  document.addEventListener('keydown', backspaceHandler)
   document.addEventListener('keydown', escHandler)
-  document.addEventListener('keydown', undoHandler)
   
+  window._drawBackspaceHandler = backspaceHandler
   window._drawEscHandler = escHandler
-  window._drawUndoHandler = undoHandler
 }
 
 // ========== 导入导出功能 ==========
@@ -1705,20 +1720,21 @@ function cancelDraw() {
   drawFeature = null
   isDrawing.value = false
   
-  // 【新增】清理绘制时的键盘监听
   if (window._drawEscHandler) {
     document.removeEventListener('keydown', window._drawEscHandler)
     delete window._drawEscHandler
   }
-  if (window._drawUndoHandler) {
-    document.removeEventListener('keydown', window._drawUndoHandler)
-    delete window._drawUndoHandler
+
+  if (window._drawBackspaceHandler) {
+    document.removeEventListener('keydown', window._drawBackspaceHandler)
+    delete window._drawBackspaceHandler
   }
-  
+
   if (drawInteraction) {
     map.removeInteraction(drawInteraction)
     drawInteraction = null
   }
+
   if (drawLayer) {
     map.removeLayer(drawLayer)
     drawLayer = null
@@ -1732,9 +1748,13 @@ onMounted(() => {
 
   // 添加ECS键盘监听
   escHandler = (e) => {
-    if (e.key === 'Escape' && isEditing.value) {
-      // 只在图形编辑模式且没有打开表单时处理
-      if(isEditing.value && !showPointForm.value && !showLandsForm.value) {
+    if (e.key === 'Escape') {
+      // 表单弹窗优先
+      if (showPointForm.value || showLandsForm.value) {
+        cancelDraw()
+      } 
+      // 几何编辑模式
+      else if (isEditing.value) {
         exitEditMode()
         closePopup()
       }
@@ -1985,26 +2005,6 @@ onUnmounted(() => {
   color: #eee;
 }
 
-.draw-hint {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 12px;
-  z-index: 1000;
-  pointer-events: none;
-}
-.draw-hint kbd {
-  background: #333;
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin: 0 2px;
-}
-
 .status-info {
   position: absolute;
   bottom: 0;
@@ -2021,8 +2021,38 @@ onUnmounted(() => {
 }
 
 .status-info div {
-  margin: 1px 0;
+  padding: 3px;
+  font-size: 14px;
   color: #52c41a;
+}
+
+/* 操作提示样式 */
+.operation-hint {
+  position: absolute;
+  bottom: 88px;
+  width: 300px;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.operation-hint h4 {
+  padding: 3px 5px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 16px;
+  color: #ccc;
+  margin: 0;
+}
+
+.hint-content {
+  padding: 3px;
+  font-size: 14px;
+  color: #52c41a;
+}
+
+.hint-content kbd {
+  padding: 0 3px;
+  font-size: 14px;
+  color: #ffd966;
 }
 
 /* 要素弹窗样式 */
