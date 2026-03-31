@@ -527,13 +527,37 @@ function resetForms() {
 function calcArea() {
   let mapFeature = null
   
-  // 编辑模式：从地图图层获取
-  if (selectedFeature.value && selectedFeature.value.layerType === 'lands') {
+  // 1. 优先检查导入模式
+  if (window._tempImportGeometry && window._tempImportGeometry.layerType === 'lands') {
+    const { coordinates, type } = window._tempImportGeometry
+    
+    // 根据几何类型创建临时 Feature 用于计算面积
+    if (type === 'Polygon') {
+      // 将坐标转换为3857用于面积计算
+      const transformedCoords = coordinates.map(ring => 
+        ring.map(coord => {
+          // 如果坐标是4326，转换为3857
+          if (coord.length === 2 && Math.abs(coord[0]) <= 180) {
+            return fromLonLat(coord)
+          }
+          return coord
+        })
+      )
+      
+      const tempFeature = new Feature({
+        geometry: new Polygon(transformedCoords)
+      })
+      mapFeature = tempFeature
+    }
+  }
+  
+  // 2. 编辑模式：从地图图层获取
+  if (!mapFeature && selectedFeature.value && selectedFeature.value.layerType === 'lands') {
     const source = layers.value.lands.layer?.getSource()
     mapFeature = source?.getFeatures().find(f => f.get('id') === selectedFeature.value.id)
   }
   
-  // 绘制模式：使用 drawFeature
+  // 3. 绘制模式：使用 drawFeature
   if (!mapFeature && drawFeature) {
     mapFeature = drawFeature
   }
@@ -547,12 +571,7 @@ function calcArea() {
   if (!geometry) return
   
   const area = Math.round(geometry.getArea())
-  
-  // 直接赋值
   landsForm.value.site_area = area
-  
-  // 强制触发更新
-  landsForm.value = { ...landsForm.value }
 }
 
 
@@ -850,13 +869,6 @@ function landsDraw() {
 }
 
 // ========== 导入导出功能 ==========
-// 统一的坐标转换函数
-function convertCoordinate(coord, fromEPSG, toEPSG) {
-  if (fromEPSG === toEPSG) return coord
-  // 使用 proj4 转换
-  return proj4(fromEPSG, toEPSG, coord)
-}
-
 // 导入文件（触发文件选择）
 function handleImport(layerType) {
   importLayerType.value = layerType
@@ -1023,6 +1035,14 @@ async function importWithTransform(sourceEPSG) {
         type: props.type || '',
         site_area: props.site_area || null
       }
+      // 如果导入的用地没有面积数据，自动计算
+      if (!landsForm.value.site_area && geomType === 'Polygon') {
+        const tempCoords = coordinates.map(ring => 
+          ring.map(coord => fromLonLat(coord))
+        )
+        const tempGeometry = new Polygon(tempCoords)
+        landsForm.value.site_area = Math.round(tempGeometry.getArea())
+      }
     }
     
     // 存储临时几何信息
@@ -1136,14 +1156,14 @@ async function handleExport(layerType) {
       const props = feature.getProperties()
       const properties = {
         name: props.name,
-        type: props.type,
-        admin_region: props.admin_region
+        type: props.type
       }
       if (layerType === 'points') {
-        properties.address = props.address
-        properties.capacity = props.capacity
+        properties.level = props.level
+        properties.floor_area = props.floor_area
+        properties.scale = props.scale
       } else {
-        properties.area = props.area
+        properties.site_area = props.site_area
       }
       
       let geom = feature.getGeometry()
