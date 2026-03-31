@@ -1543,7 +1543,6 @@ async function saveLandsToDatabase() {
           coordinates: finalCoordinates 
         }
       }
-      console.log('发送数据:', JSON.stringify(postData, null, 2))
       
       try {
         const response = await createLands(postData)
@@ -1827,9 +1826,6 @@ onMounted(() => {
     }
   }
   document.addEventListener('keydown', escHandler)
-
-  // 调试：将 store 挂载到 window
-  window.debugStore = vectorStore
 })
 
 onUnmounted(() => {
