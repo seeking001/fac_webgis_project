@@ -230,21 +230,38 @@
 </template>
 
 <script setup>
+// 1、Vue核心
 import { onMounted, onUnmounted, ref, computed, markRaw } from 'vue'
+
+// 2、OpenLayers核心
 import { Map, View } from 'ol'
 import 'ol/ol.css'
+
+// 3、OpenLayers图层
 import TileLayer from 'ol/layer/Tile'
-import Feature from 'ol/Feature'
-import { fromLonLat, toLonLat, transform } from 'ol/proj'
-import proj4 from 'proj4'
+import VectorLayer from 'ol/layer/Vector'
+
+// 4、OpenLayers数据源
 import XYZ from 'ol/source/XYZ'
 import VectorSource from 'ol/source/Vector'
-import VectorLayer from 'ol/layer/Vector'
-import { Style, Fill, Stroke, Text, Circle } from 'ol/style'
+
+// 5、OpenLayers要素与几何
+import Feature from 'ol/Feature'
 import { Point, Polygon } from 'ol/geom'
+
+// 6、OpenLayers样式
+import { Style, Fill, Stroke, Text, Circle } from 'ol/style'
+
+// 7、OpenLayers交互与控件
 import { FullScreen, ScaleLine, MousePosition, defaults } from "ol/control"
 import { createStringXY } from "ol/coordinate"
 import { Draw, Modify } from 'ol/interaction'
+
+// 8、工具库
+import { fromLonLat, toLonLat } from 'ol/proj'
+import proj4 from 'proj4'
+
+// 9、内部模块
 import { useVectorStore } from '../stores/vectorStore'
 import { getMapBbox } from '../utils/mapUtil'
 import { createPoints, updatePoints, deletePoints, createLands, updateLands, deleteLands } from '../services/api'
@@ -329,6 +346,11 @@ const showLandsForm = ref(false)
 const isDrawing = ref(false)
 const isEditing = ref(false)  // 是否处于编辑模式
 const originalGeometry = ref(null)  // 保存原始几何，用于取消编辑
+
+const drawHandlers = {
+  backspace: null,
+  esc: null
+}
 let escHandler = null  // 键盘状态
 
 // 导入导出相关
@@ -428,10 +450,78 @@ const layers = ref({
   }
 })
 
+// 设施样式定义
+const POINT_STYLES = {
+  // 【行政管理类】
+  行政办公场所: '🏛️',
+  社区管理机构: '🏢',
+  // 【文化体育类】
+  大型文化设施: '🏫',
+  大型体育设施: '🏟️',
+  社区文化设施: '🎨',
+  社区体育设施: '🏀',
+  // 【医疗卫生类】
+  医院: '🏥',
+  门诊部: '💊',
+  社区健康服务中心: '❤️',
+  // 【教育类】
+  幼儿园: '🌈',
+  小学: '✏️',
+  初中: '📙',
+  九年一贯制学校: '📘',
+  高中: '📚',
+  高等教育: '🎓',
+  职业教育: '💻',
+  // 【社会福利类】
+  养老院: '🏠',
+  儿童福利院: '🛝',
+  残疾人服务中心: '♿',
+  社区老年人日间照料中心: '🍵',
+  社区托儿机构: '🍼',
+  社区救助站: '🤝',
+  // 【其它类】
+  其它设施: '📍'
+}
+
+const LAND_STYLES = {
+  '居住用地': 'rgba(255, 255, 45, 0.6)',
+  '商业用地': 'rgba(255, 0, 0, 0.6)',
+  '工业用地': 'rgba(187, 150, 116, 0.6)',
+  '公园绿地': 'rgba(0, 255, 0, 0.6)',
+  '行政管理用地': 'rgba(254, 24, 201, 0.6)',
+  '文体设施用地': 'rgba(254, 24, 201, 0.6)',
+  '医疗卫生用地': 'rgba(254, 24, 201, 0.6)',
+  '教育设施用地': 'rgba(254, 24, 201, 0.6)',
+  '社会福利用地': 'rgba(254, 24, 201, 0.6)'
+}
+
 // 计算属性
 const pointsCount = computed(() => vectorStore.points.length)
 const landsCount = computed(() => vectorStore.lands.length)
 const getActiveBasemap = computed(() => basemaps.value.find(b => b.id === activeBasemapId.value))
+
+// 坐标转换辅助函数
+function transformCoordinates(coords, fromEPSG, toEPSG, geomType) {
+  if (fromEPSG === toEPSG) return coords
+  
+  const transform = (coord) => proj4(fromEPSG, toEPSG, coord)
+  
+  if (geomType === 'Point') {
+    return transform(coords)
+  }
+  
+  if (geomType === 'Polygon') {
+    return coords.map(ring => ring.map(transform))
+  }
+  
+  return coords
+}
+
+// 表单重置函数
+function resetForms() {
+  pointsForm.value = { name: '', level: '', type: '', floor_area: null, scale: null }
+  landsForm.value = { name: '', type: '', site_area: null }
+}
 
 // 自动计算用地面积函数
 function calcArea() {
@@ -617,40 +707,9 @@ function updateVectorLayer(layerKey) {
 
 
 // ========== 样式函数 ==========
+// 设施点样式
 function createPointsStyle(feature) {
-  const type = feature.get('type')
-  const icons = {
-    // 【新增图标 - 行政管理类】
-    行政办公场所: '🏛️',
-    社区管理机构: '🏢',
-    // 【新增图标 - 文化体育类】
-    大型文化设施: '🏫',
-    大型体育设施: '🏟️',
-    社区文化设施: '🎨',
-    社区体育设施: '🏀',
-    // 【新增图标 - 医疗卫生类】
-    医院: '🏥',
-    门诊部: '💊',
-    社区健康服务中心: '❤️',
-    // 【新增图标 - 教育类】
-    幼儿园: '🌈',
-    小学: '✏️',
-    初中: '📙',
-    九年一贯制学校: '📘',
-    高中: '📚',
-    高等教育: '🎓',
-    职业教育: '💻',
-    // 【新增图标 - 社会福利类】
-    养老院: '🏠',
-    儿童福利院: '🛝',
-    残疾人服务中心: '♿',
-    社区老年人日间照料中心: '🍵',
-    社区托儿机构: '🍼',
-    社区救助站: '🤝',
-    // 【新增图标 - 其它类】
-    其它设施: '📍'
-  }
-  const icon = icons[type] || '📍'
+  const icon = POINT_STYLES[feature.get('type')] || '📍'
   const name = feature.get('name') || ''
   
   return [
@@ -673,21 +732,10 @@ function createPointsStyle(feature) {
   ]
 }
 
+// 设施用地样式
 function createLandsStyle(feature) {
   const type = feature.get('type')
-  let color = 'rgba(0, 0, 0, 0.6)'
-  
-  switch(type) {
-    case '居住用地': color = 'rgba(255, 255, 45, 0.6)'; break
-    case '商业用地': color = 'rgba(255, 0, 0, 0.6)'; break
-    case '工业用地': color = 'rgba(187, 150, 116, 0.6)'; break
-    case '公园绿地': color = 'rgba(0, 255, 0, 0.6)'; break
-    case '行政管理用地': color = 'rgba(254, 24, 201, 0.6)'; break
-    case '文体设施用地': color = 'rgba(254, 24, 201, 0.6)'; break
-    case '医疗卫生用地': color = 'rgba(254, 24, 201, 0.6)'; break
-    case '教育设施用地': color = 'rgba(254, 24, 201, 0.6)'; break
-    case '社会福利用地': color = 'rgba(254, 24, 201, 0.6)'; break
-  }
+  let color = LAND_STYLES[type] || 'rgba(0, 0, 0, 0.6)'
 
   return new Style({
     fill: new Fill({ color }),
@@ -698,17 +746,8 @@ function createLandsStyle(feature) {
 
 // ========== 绘制功能 ==========
 function startDrawing(layerKey) {
-  if (layerKey === 'points') {
-    pointsForm.value = { name: '', level: '', type: '', floor_area: null, scale: null }
-  } else if (layerKey === 'lands') {
-    landsForm.value = { name: '', type: '', site_area: null }
-  }
-  
-  if (layerKey === 'points') {
-    pointDraw()
-  } else if (layerKey === 'lands') {
-    landsDraw()
-  }
+  resetForms()
+  layerKey === 'points' ? pointDraw() : landsDraw()
 }
 
 // 点绘制功能
@@ -794,24 +833,20 @@ function landsDraw() {
     if (e.key === 'Backspace' && isDrawing.value) {
       e.preventDefault()
       // 调用 Draw 交互的 removeLastPoint 方法
-      if (drawInteraction && typeof drawInteraction.removeLastPoint === 'function') {
-        drawInteraction.removeLastPoint()
-      }
+      drawInteraction?.removeLastPoint?.()
     }
   }
   
   // Esc键退出绘制
   const escHandler = (e) => {
-    if (e.key === 'Escape' && isDrawing.value) {
-      cancelDraw()
-    }
+    if (e.key === 'Escape' && isDrawing.value) cancelDraw()
   }
   
   document.addEventListener('keydown', backspaceHandler)
   document.addEventListener('keydown', escHandler)
   
-  window._drawBackspaceHandler = backspaceHandler
-  window._drawEscHandler = escHandler
+  drawHandlers.backspace = backspaceHandler
+  drawHandlers.esc = escHandler
 }
 
 // ========== 导入导出功能 ==========
@@ -944,8 +979,7 @@ async function importWithTransform(sourceEPSG) {
   const targetEPSG = 'EPSG:4326'
   let successCount = 0
   
-  for (let i = 0; i < importFeatures.value.length; i++) {
-    const feature = importFeatures.value[i]
+  for (const feature of importFeatures.value) {
     let geom = feature.geometry
     let geomType = geom.type
     let coordinates = geom.coordinates
@@ -963,17 +997,7 @@ async function importWithTransform(sourceEPSG) {
     // 坐标转换
     if (sourceEPSG !== targetEPSG) {
       try {
-        if (geomType === 'Point') {
-          coordinates = proj4(sourceEPSG, targetEPSG, coordinates)
-        } else if (geomType === 'Polygon') {
-          coordinates = coordinates.map(ring =>
-            ring.map(coord => {
-              const result = proj4(sourceEPSG, targetEPSG, coord)
-              // 确保返回的是数组 [lng, lat]
-              return [result[0], result[1]]
-            })
-          )
-        }
+        coordinates = transformCoordinates(coordinates, sourceEPSG, targetEPSG, geomType)
       } catch (err) {
         console.error('坐标转换失败:', err)
         alert('坐标转换失败，请检查源坐标系选择是否正确')
@@ -981,11 +1005,10 @@ async function importWithTransform(sourceEPSG) {
       }
     }
     
-    // 提取属性
+    // 准备表单数据
     const props = feature.properties || {}
     const layerType = importLayerType.value
     
-    // 准备表单数据
     if (layerType === 'points') {
       pointsForm.value = {
         name: props.name || '',
@@ -1003,7 +1026,7 @@ async function importWithTransform(sourceEPSG) {
     }
     
     // 存储临时几何信息
-    window._tempImportGeometry = { type: geomType, coordinates: coordinates, layerType: layerType }
+    window._tempImportGeometry = { type: geomType, coordinates, layerType }
     
     // 弹出表单
     if (layerType === 'points') {
@@ -1016,7 +1039,6 @@ async function importWithTransform(sourceEPSG) {
     await new Promise((resolve) => {
       window._resolveImport = resolve
     })
-    
     successCount++
   }
   
@@ -1035,8 +1057,7 @@ async function handleExport(layerType) {
     return
   }
   
-  const source = layerObj.layer.getSource()
-  const features = source.getFeatures()
+  const features = layerObj.layer.getSource().getFeatures()
   if (features.length === 0) {
     alert('没有可导出的要素')
     return
@@ -1194,7 +1215,7 @@ function toggleEditMode(feature) {
   const layerType = feature.layerType
   const layerObj = layers.value[layerType]
   
-  if (!layerObj.loaded) return
+  if (!layerObj?.loaded) return
   
   if (!isEditing.value) {
     // 进入编辑图形模式
@@ -1202,7 +1223,7 @@ function toggleEditMode(feature) {
 
     // 获取要编辑的地图要素
     const source = layerObj.layer.getSource()
-    const mapFeature = source.getFeatures().find(f => f.get('id') === feature.id)
+    const mapFeature = source?.getFeatures().find(f => f.get('id') === feature.id)
 
     if(mapFeature){
       // 保存原始几何
@@ -1746,34 +1767,35 @@ function closePopup() {
 
 // 取消绘制函数
 function cancelDraw() {
-  // 如果正在导入模式，跳过当前要素
+  // 导入模式处理
   if (window._tempImportGeometry && window._resolveImport) {
     showLandsForm.value = false
     showPointForm.value = false
     const resolve = window._resolveImport
     delete window._tempImportGeometry
     delete window._resolveImport
-    if (resolve) resolve()
+    resolve?.()
     return
   }
   
+  // 清理表单状态
   showLandsForm.value = false
   showPointForm.value = false
-  landsForm.value = { name: '', type: '', site_area: null }
-  pointsForm.value = { name: '', level: '', type: '', floor_area: null, scale: null }
+  resetForms()
+
+  // 清理绘制状态
   drawFeature = null
   isDrawing.value = false
   
-  if (window._drawEscHandler) {
-    document.removeEventListener('keydown', window._drawEscHandler)
-    delete window._drawEscHandler
-  }
+  // 统一清理键盘事件
+  Object.entries(drawHandlers).forEach(([key, handler]) => {
+    if (handler) {
+      document.removeEventListener('keydown', handler)
+      drawHandlers[key] = null
+    }
+  })
 
-  if (window._drawBackspaceHandler) {
-    document.removeEventListener('keydown', window._drawBackspaceHandler)
-    delete window._drawBackspaceHandler
-  }
-
+  // 清理绘制交互和图层
   if (drawInteraction) {
     map.removeInteraction(drawInteraction)
     drawInteraction = null
