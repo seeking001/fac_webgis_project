@@ -5,9 +5,7 @@
 
     <!-- 底图切换控件 -->
     <div class="basemap-switcher" @mouseenter="basemapPanelVisible = true" @mouseleave="basemapPanelVisible = false">
-      <button class="basemap-main-btn">
-        {{ getActiveBasemap.name }}
-      </button>
+      <button class="basemap-main-btn">{{ getActiveBasemap.name }}</button>
       
       <transition name="slide-down">
         <div class="basemap-panel" v-if="basemapPanelVisible">
@@ -29,25 +27,18 @@
       </transition>
     </div>
 
-    <!-- 左侧边栏：图形操作 -->
+    <!-- 左侧边栏 -->
     <div class="left_sidebar">
       <h3>图形操作</h3>
-      
       <div class="layer-panel" v-for="(config, key) in layers" :key="key">
         <h4>{{ config.name }}</h4>
-        
-        <!-- 1. 加载与显示控制 -->
         <div class="control-group">
           <input type="checkbox" v-model="config.visible" @change="toggleLayer(key)">
           <span>加载显示</span>
           <select v-model="config.selectedType" @change="onTypeChange(key)" :disabled="!config.visible">
-            <option v-for="type in config.types" :value="type.value">
-              {{ type.label }}
-            </option>
+            <option v-for="type in config.types" :value="type.value">{{ type.label }}</option>
           </select>
         </div>
-        
-        <!-- 2. 绘制与编辑 -->
         <div class="control-group">
           <button @click="startDrawing(key)" :disabled="!config.visible">绘制</button>
           <button @click="handleImport(key)" :disabled="!config.visible">导入</button>
@@ -56,29 +47,24 @@
       </div>
     </div>
 
-    <!-- 右侧边栏：信息显示 -->
+    <!-- 右侧边栏 -->
     <div class="right_sidebar">
       <h3>信息显示</h3>
       <div class="status-info">
         <h4>加载状态</h4>
         <div v-for="(config, key) in layers">
-          <span v-if="config.loaded">
-            ✅ {{ config.name }}: {{ key === 'points' ? pointsCount : landsCount }} 个
-          </span>
+          <span v-if="config.loaded">✅ {{ config.name }}: {{ key === 'points' ? pointsCount : landsCount }} 个</span>
           <span v-else>◻️ {{ config.name }}: 未加载</span>
         </div>
       </div>
       
-      <!-- 操作提示 -->
       <div class="operation-hint" v-if="isDrawing || showPointForm || showLandsForm || selectedFeature">
         <h4>操作提示</h4>
         <div class="hint-content">
-          <!-- 绘制中 -->
           <p v-if="isDrawing">
             🔹 按 <kbd>Backspace</kbd> 撤销上一个顶点<br>
             🔹 按 <kbd>Esc</kbd> 退出绘制
           </p>
-          <!-- 选中要素 -->
           <p v-else>
             🔹 点击要素查看详情<br>
             🔹 点击"编辑图形"可拖动顶点修改<br>
@@ -88,14 +74,13 @@
       </div>
     </div>
     
-    <!-- 点击要素弹窗 -->
+    <!-- 要素弹窗 -->
     <div v-if="selectedFeature && popupPosition" 
           :style="{left: popupPosition.x + 'px', top: popupPosition.y + 'px'}" 
           class="feature-popup">
       <div class="popup-content">
         <button @click="closePopup" class="close-btn">x</button>
         <h4>{{ selectedFeature.name }}</h4>
-        
         <div v-if="selectedFeature.layerType === 'points'">
           <p><strong>设施级别：</strong>{{ selectedFeature.level }}</p>
           <p><strong>设施类型：</strong>{{ selectedFeature.type }}</p>
@@ -106,7 +91,6 @@
           <p><strong>用地类型：</strong>{{ selectedFeature.type }}</p>
           <p><strong>用地面积：</strong>{{ selectedFeature.site_area }}平方米</p>
         </div>
-        
         <div class="popup-buttons">
           <button @click="toggleEditMode(selectedFeature)" class="edit-btn" :class="{ 'active': isEditing }">
             {{ isEditing ? '编辑属性' : '编辑图形' }}
@@ -118,7 +102,7 @@
       </div>
     </div>
 
-    <!-- 设施点表单弹窗 -->
+    <!-- 设施点表单 -->
     <div v-if="showPointForm" class="point-form">
       <div class="form-overlay" @click="cancelDraw"></div>
       <div class="form-content">
@@ -140,19 +124,15 @@
             <label>设施类型：</label>
             <select v-model="pointsForm.type" required>
               <option value="">请选择类型</option>
-              <!-- 新增类型 - 行政管理类 -->
               <option value="行政办公场所">行政办公场所</option>
               <option value="社区管理机构">社区管理机构</option>
-              <!-- 新增类型 - 文化体育类 -->
               <option value="大型文化设施">大型文化设施</option>
               <option value="大型体育设施">大型体育设施</option>
               <option value="社区文化设施">社区文化设施</option>
               <option value="社区体育设施">社区体育设施</option>
-              <!-- 新增类型 - 医疗卫生类 -->
               <option value="医院">医院</option>
               <option value="门诊部">门诊部</option>
               <option value="社区健康服务中心">社区健康服务中心</option>
-              <!-- 新增类型 - 教育类 -->
               <option value="幼儿园">幼儿园</option>
               <option value="小学">小学</option>
               <option value="初中">初中</option>
@@ -160,14 +140,12 @@
               <option value="高中">高中</option>
               <option value="高等教育">高等教育</option>
               <option value="职业教育">职业教育</option>
-              <!-- 新增类型 - 社会福利类 -->
               <option value="养老院">养老院</option>
               <option value="儿童福利院">儿童福利院</option>
               <option value="残疾人服务中心">残疾人服务中心</option>
               <option value="社区老年人日间照料中心">社区老年人日间照料中心</option>
               <option value="社区托儿机构">社区托儿机构</option>
               <option value="社区救助站">社区救助站</option>
-              <!-- 新增类型 - 其它类 -->
               <option value="其它设施">其它设施</option>
             </select>
           </div>
@@ -187,7 +165,7 @@
       </div>
     </div>
 
-    <!-- 设施用地表单弹窗 -->
+    <!-- 设施用地表单 -->
     <div v-if="showLandsForm" class="lands-form">
       <div class="form-overlay" @click="cancelDraw"></div>
       <div class="form-content">
@@ -230,260 +208,56 @@
 </template>
 
 <script setup>
-// 1、Vue核心
-import { onMounted, onUnmounted, ref, computed, markRaw } from 'vue'
+// Vue 核心
+import { onMounted, onUnmounted, ref, computed, markRaw, watch } from 'vue'
 
-// 2、OpenLayers核心
+// OpenLayers 核心
 import { Map, View } from 'ol'
 import 'ol/ol.css'
 
-// 3、OpenLayers图层
+// OpenLayers 图层与数据源
 import TileLayer from 'ol/layer/Tile'
 import VectorLayer from 'ol/layer/Vector'
-
-// 4、OpenLayers数据源
 import XYZ from 'ol/source/XYZ'
 import VectorSource from 'ol/source/Vector'
 
-// 5、OpenLayers要素与几何
+// OpenLayers 要素与几何
 import Feature from 'ol/Feature'
 import { Point, Polygon } from 'ol/geom'
 
-// 6、OpenLayers样式
+// OpenLayers 样式
 import { Style, Fill, Stroke, Text, Circle } from 'ol/style'
 
-// 7、OpenLayers交互与控件
+// OpenLayers 交互与控件
 import { FullScreen, ScaleLine, MousePosition, defaults } from "ol/control"
 import { createStringXY } from "ol/coordinate"
 import { Draw, Modify } from 'ol/interaction'
 
-// 8、工具库
-import { getArea } from 'ol/sphere'
+// 工具库
 import { fromLonLat, toLonLat } from 'ol/proj'
 import proj4 from 'proj4'
 
-// 9、内部模块
+// 内部模块
 import { useVectorStore } from '../stores/vectorStore'
 import { getMapBbox } from '../utils/mapUtil'
 import { createPoints, updatePoints, deletePoints, createLands, updateLands, deleteLands } from '../services/api'
 
-// DOM 引用
-const mapContainer = ref(null)
-let map = null
-
-// 定义 EPSG:4547（确保全局可用）
+// ==================== 常量定义 ====================
 proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
 
-// 天地图密钥配置
 const TIANDITU_API_KEY = import.meta.env.VITE_TIANDITU_API_KEY
 
-// 地图底图预定义
-const basemaps = ref([
-  {
-    id: 'vector',
-    name: '普通地图',
-    layer: markRaw(new TileLayer({
-      source: new XYZ({
-        url: `http://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
-        wrapX: false,
-        crossOrigin: 'anonymous'
-      }),
-      zIndex: 0
-    })),
-    hasRoadNet: true,
-    roadNetVisible: false,
-    roadNetLayer: markRaw(new TileLayer({
-      source: new XYZ({
-        url: `http://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
-        wrapX: false,
-        crossOrigin: 'anonymous'
-      }),
-      visible: false,
-      zIndex: 1
-    }))
-  },
-  {
-    id: 'satellite',
-    name: '卫星地图',
-    layer: markRaw(new TileLayer({
-      source: new XYZ({
-        url: `http://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
-        wrapX: false,
-        crossOrigin: 'anonymous'
-      }),
-      zIndex: 0
-    })),
-    hasRoadNet: true,
-    roadNetVisible: false,
-    roadNetLayer: markRaw(new TileLayer({
-      source: new XYZ({
-        url: `http://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
-        wrapX: false,
-        crossOrigin: 'anonymous'
-      }),
-      visible: false,
-      zIndex: 1
-    }))
-  },
-  {
-    id: '3d',
-    name: '三维地图',
-    layer: null,
-    hasRoadNet: false,
-    roadNetVisible: false,
-    roadNetLayer: null
-  }
-])
-
-// 默认底图及显示状态
-const activeBasemapId = ref('vector')
-const basemapPanelVisible = ref(false)
-
-// 状态管理
-const selectedFeature = ref(null)
-const popupPosition = ref(null)
-const showPointForm = ref(false)
-const showLandsForm = ref(false)
-const isDrawing = ref(false)
-const isEditing = ref(false)  // 是否处于编辑模式
-const originalGeometry = ref(null)  // 保存原始几何，用于取消编辑
-
-const drawHandlers = {
-  backspace: null,
-  esc: null
-}
-let escHandler = null  // 键盘状态
-
-// 导入导出相关
-const importFile = ref(null)               // 暂存待导入的文件
-const importLayerType = ref(null)          // 当前导入的目标图层 'points' 或 'lands'
-const importFeatures = ref([])             // 解析后的要素列表
-const importCurrentIndex = ref(0)          // 当前处理的要素索引（用于多要素逐个提示）
-const showImportConfirm = ref(false)       // 是否显示导入确认对话框
-
-// 表单数据
-const pointsForm = ref({
-  name: '',
-  level: '',
-  type: '',
-  floor_area: null,
-  scale: null
-})
-const landsForm = ref({
-  name: '',
-  type: '',
-  site_area: null
-})
-
-// 绘制相关
-let drawFeature = null
-let drawInteraction = null
-let drawLayer = null
-let pointModify = null
-let landsModify = null
-
-// Store
-const vectorStore = useVectorStore()
-
-// 矢量图层配置
-const layers = ref({
-  points: {
-    name: '设施点',
-    visible: false,
-    loaded: false,
-    layer: null,
-    selectedType: 'all',
-    drawType: 'Point',
-    // editable: false,
-    types: [
-      { label: '全部类型', value: 'all' },
-      // 【新增类型 - 行政管理类】
-      { label: '行政办公场所', value: '行政办公场所' },
-      { label: '社区管理机构', value: '社区管理机构' },
-      // 【新增类型 - 文化体育类】
-      { label: '大型文化设施', value: '大型文化设施' },
-      { label: '大型体育设施', value: '大型体育设施' },
-      { label: '社区文化设施', value: '社区文化设施' },
-      { label: '社区体育设施', value: '社区体育设施' },
-      // 【新增类型 - 医疗卫生类】
-      { label: '医院', value: '医院' },
-      { label: '门诊部', value: '门诊部' },
-      { label: '社区健康服务中心', value: '社区健康服务中心' },
-      // 【新增类型 - 教育类】
-      { label: '幼儿园', value: '幼儿园' },
-      { label: '小学', value: '小学' },
-      { label: '初中', value: '初中' },
-      { label: '九年一贯制学校', value: '九年一贯制学校' },
-      { label: '高中', value: '高中' },
-      { label: '高等教育', value: '高等教育' },
-      { label: '职业教育', value: '职业教育' },
-      // 【新增类型 - 社会福利类】
-      { label: '养老院', value: '养老院' },
-      { label: '儿童福利院', value: '儿童福利院' },
-      { label: '残疾人服务中心', value: '残疾人服务中心' },
-      { label: '社区老年人日间照料中心', value: '社区老年人日间照料中心' },
-      { label: '社区托儿机构', value: '社区托儿机构' },
-      { label: '社区救助站', value: '社区救助站' },
-      // 【新增类型 - 其它类】
-      { label: '其它设施', value: '其它设施' }
-    ]
-  },
-  lands: {
-    name: '设施用地',
-    visible: false,
-    loaded: false,
-    layer: null,
-    selectedType: 'all',
-    drawType: 'Polygon',
-    // editable: false,
-    types: [
-      { label: '全部类型', value: 'all' },
-      { label: '商业用地', value: '商业用地' },
-      { label: '居住用地', value: '居住用地' },
-      { label: '工业用地', value: '工业用地' },
-      { label: '公园绿地', value: '公园绿地' },
-      { label: '行政管理用地', value: '行政管理用地' },
-      { label: '文体设施用地', value: '文体设施用地' },
-      { label: '医疗卫生用地', value: '医疗卫生用地' },
-      { label: '教育设施用地', value: '教育设施用地' },
-      { label: '社会福利用地', value: '社会福利用地' }
-    ]
-  }
-})
-
-// 设施样式定义
+// 设施点图标样式
 const POINT_STYLES = {
-  // 【行政管理类】
-  行政办公场所: '🏛️',
-  社区管理机构: '🏢',
-  // 【文化体育类】
-  大型文化设施: '🏫',
-  大型体育设施: '🏟️',
-  社区文化设施: '🎨',
-  社区体育设施: '🏀',
-  // 【医疗卫生类】
-  医院: '🏥',
-  门诊部: '💊',
-  社区健康服务中心: '❤️',
-  // 【教育类】
-  幼儿园: '🌈',
-  小学: '✏️',
-  初中: '📙',
-  九年一贯制学校: '📘',
-  高中: '📚',
-  高等教育: '🎓',
-  职业教育: '💻',
-  // 【社会福利类】
-  养老院: '🏠',
-  儿童福利院: '🛝',
-  残疾人服务中心: '♿',
-  社区老年人日间照料中心: '🍵',
-  社区托儿机构: '🍼',
-  社区救助站: '🤝',
-  // 【其它类】
+  行政办公场所: '🏛️', 社区管理机构: '🏢',
+  大型文化设施: '🏫', 大型体育设施: '🏟️', 社区文化设施: '🎨', 社区体育设施: '🏀',
+  医院: '🏥', 门诊部: '💊', 社区健康服务中心: '❤️',
+  幼儿园: '🌈', 小学: '✏️', 初中: '📙', 九年一贯制学校: '📘', 高中: '📚', 高等教育: '🎓', 职业教育: '💻',
+  养老院: '🏠', 儿童福利院: '🛝', 残疾人服务中心: '♿', 社区老年人日间照料中心: '🍵', 社区托儿机构: '🍼', 社区救助站: '🤝',
   其它设施: '📍'
 }
 
+// 设施用地颜色样式
 const LAND_STYLES = {
   '居住用地': 'rgba(255, 255, 45, 0.6)',
   '商业用地': 'rgba(255, 0, 0, 0.6)',
@@ -496,68 +270,141 @@ const LAND_STYLES = {
   '社会福利用地': 'rgba(254, 24, 201, 0.6)'
 }
 
-// 计算属性
+// 底图配置
+const basemaps = ref([
+  {
+    id: 'vector', name: '普通地图',
+    layer: markRaw(new TileLayer({
+      source: new XYZ({ url: `http://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`, wrapX: false, crossOrigin: 'anonymous' }),
+      zIndex: 0
+    })),
+    hasRoadNet: true, roadNetVisible: false,
+    roadNetLayer: markRaw(new TileLayer({
+      source: new XYZ({ url: `http://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`, wrapX: false, crossOrigin: 'anonymous' }),
+      visible: false, zIndex: 1
+    }))
+  },
+  {
+    id: 'satellite', name: '卫星地图',
+    layer: markRaw(new TileLayer({
+      source: new XYZ({ url: `http://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`, wrapX: false, crossOrigin: 'anonymous' }),
+      zIndex: 0
+    })),
+    hasRoadNet: true, roadNetVisible: false,
+    roadNetLayer: markRaw(new TileLayer({
+      source: new XYZ({ url: `http://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`, wrapX: false, crossOrigin: 'anonymous' }),
+      visible: false, zIndex: 1
+    }))
+  },
+  { id: '3d', name: '三维地图', layer: null, hasRoadNet: false, roadNetVisible: false, roadNetLayer: null }
+])
+
+// 矢量图层配置
+const layers = ref({
+  points: {
+    name: '设施点', visible: false, loaded: false, layer: null, selectedType: 'all',
+    types: [
+      { label: '全部类型', value: 'all' },
+      { label: '行政办公场所', value: '行政办公场所' }, { label: '社区管理机构', value: '社区管理机构' },
+      { label: '大型文化设施', value: '大型文化设施' }, { label: '大型体育设施', value: '大型体育设施' },
+      { label: '社区文化设施', value: '社区文化设施' }, { label: '社区体育设施', value: '社区体育设施' },
+      { label: '医院', value: '医院' }, { label: '门诊部', value: '门诊部' }, { label: '社区健康服务中心', value: '社区健康服务中心' },
+      { label: '幼儿园', value: '幼儿园' }, { label: '小学', value: '小学' }, { label: '初中', value: '初中' },
+      { label: '九年一贯制学校', value: '九年一贯制学校' }, { label: '高中', value: '高中' }, { label: '高等教育', value: '高等教育' },
+      { label: '职业教育', value: '职业教育' }, { label: '养老院', value: '养老院' }, { label: '儿童福利院', value: '儿童福利院' },
+      { label: '残疾人服务中心', value: '残疾人服务中心' }, { label: '社区老年人日间照料中心', value: '社区老年人日间照料中心' },
+      { label: '社区托儿机构', value: '社区托儿机构' }, { label: '社区救助站', value: '社区救助站' }, { label: '其它设施', value: '其它设施' }
+    ]
+  },
+  lands: {
+    name: '设施用地', visible: false, loaded: false, layer: null, selectedType: 'all',
+    types: [
+      { label: '全部类型', value: 'all' },
+      { label: '商业用地', value: '商业用地' }, { label: '居住用地', value: '居住用地' }, { label: '工业用地', value: '工业用地' },
+      { label: '公园绿地', value: '公园绿地' }, { label: '行政管理用地', value: '行政管理用地' }, { label: '文体设施用地', value: '文体设施用地' },
+      { label: '医疗卫生用地', value: '医疗卫生用地' }, { label: '教育设施用地', value: '教育设施用地' }, { label: '社会福利用地', value: '社会福利用地' }
+    ]
+  }
+})
+
+// ==================== 响应式状态 ====================
+const mapContainer = ref(null)
+let map = null
+
+const activeBasemapId = ref('vector')
+const basemapPanelVisible = ref(false)
+
+const selectedFeature = ref(null)
+const popupPosition = ref(null)
+const showPointForm = ref(false)
+const showLandsForm = ref(false)
+const isDrawing = ref(false)
+const isEditing = ref(false)
+const originalGeometry = ref(null)
+
+const drawHandlers = { backspace: null, esc: null }
+let escHandler = null
+
+const importLayerType = ref(null)
+const importFeatures = ref([])
+
+const pointsForm = ref({ name: '', level: '', type: '', floor_area: null, scale: null })
+const landsForm = ref({ name: '', type: '', site_area: null })
+
+let drawFeature = null
+let drawInteraction = null
+let drawLayer = null
+let pointModify = null
+let landsModify = null
+
+const vectorStore = useVectorStore()
+
+// ==================== 计算属性 ====================
 const pointsCount = computed(() => vectorStore.points.length)
 const landsCount = computed(() => vectorStore.lands.length)
 const getActiveBasemap = computed(() => basemaps.value.find(b => b.id === activeBasemapId.value))
 
-// 坐标转换辅助函数
+// ==================== 工具函数 ====================
 function transformCoordinates(coords, fromEPSG, toEPSG, geomType) {
   if (fromEPSG === toEPSG) return coords
-  
   const transform = (coord) => proj4(fromEPSG, toEPSG, coord)
-  
-  if (geomType === 'Point') {
-    return transform(coords)
-  }
-  
-  if (geomType === 'Polygon') {
-    return coords.map(ring => ring.map(transform))
-  }
-  
+  if (geomType === 'Point') return transform(coords)
+  if (geomType === 'Polygon') return coords.map(ring => ring.map(transform))
   return coords
 }
 
-// 表单重置函数
 function resetForms() {
   pointsForm.value = { name: '', level: '', type: '', floor_area: null, scale: null }
   landsForm.value = { name: '', type: '', site_area: null }
 }
 
-// 自动计算用地面积函数
+function calculateAreaInEPSG4547(coordinates4326) {
+  const coordinates4547 = coordinates4326.map(ring =>
+    ring.map(coord => proj4('EPSG:4326', 'EPSG:4547', coord))
+  )
+  return new Polygon(coordinates4547).getArea()
+}
+
 function calcArea() {
   let coordinates4326 = null
   
-  // 1. 导入模式：直接从临时几何获取（已经是4326）
-  if (window._tempImportGeometry && window._tempImportGeometry.layerType === 'lands') {
+  if (window._tempImportGeometry?.layerType === 'lands') {
     const { coordinates, type } = window._tempImportGeometry
-    if (type === 'Polygon') {
-      coordinates4326 = coordinates
-    }
+    if (type === 'Polygon') coordinates4326 = coordinates
   }
   
-  // 2. 编辑/查看模式：从地图要素获取（3857），需要转换
-  if (!coordinates4326 && selectedFeature.value && selectedFeature.value.layerType === 'lands') {
+  if (!coordinates4326 && selectedFeature.value?.layerType === 'lands') {
     const source = layers.value.lands.layer?.getSource()
     const mapFeature = source?.getFeatures().find(f => f.get('id') === selectedFeature.value.id)
-    if (mapFeature) {
-      const geometry3857 = mapFeature.getGeometry()
-      if (geometry3857 && geometry3857.getType() === 'Polygon') {
-        // 将3857坐标转换为4326
-        coordinates4326 = geometry3857.getCoordinates().map(ring =>
-          ring.map(coord => toLonLat(coord))
-        )
-      }
+    if (mapFeature?.getGeometry()) {
+      coordinates4326 = mapFeature.getGeometry().getCoordinates().map(ring => ring.map(coord => toLonLat(coord)))
     }
   }
   
-  // 3. 绘制模式：从绘制的要素获取（3857），需要转换
   if (!coordinates4326 && drawFeature) {
-    const geometry3857 = drawFeature.getGeometry()
-    if (geometry3857 && geometry3857.getType() === 'Polygon') {
-      coordinates4326 = geometry3857.getCoordinates().map(ring =>
-        ring.map(coord => toLonLat(coord))
-      )
+    const geom = drawFeature.getGeometry()
+    if (geom?.getType() === 'Polygon') {
+      coordinates4326 = geom.getCoordinates().map(ring => ring.map(coord => toLonLat(coord)))
     }
   }
   
@@ -566,107 +413,49 @@ function calcArea() {
     return
   }
   
-  // 计算面积：将4326坐标转换到4547投影计算
-  const area = calculateAreaInEPSG4547(coordinates4326)
-  landsForm.value.site_area = Math.round(area)
+  landsForm.value.site_area = Math.round(calculateAreaInEPSG4547(coordinates4326))
 }
 
-// 在 EPSG:4547 投影下计算面积
-function calculateAreaInEPSG4547(coordinates4326) {
-  // 确保 EPSG:4547 已定义
-  if (!proj4.defs('EPSG:4547')) {
-    proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
-  }
-  
-  // 将4326坐标转换到4547
-  const coordinates4547 = coordinates4326.map(ring =>
-    ring.map(coord => {
-      const result = proj4('EPSG:4326', 'EPSG:4547', coord)
-      return [result[0], result[1]]
-    })
-  )
-  
-  // 创建4547投影的多边形并计算面积
-  const polygon4547 = new Polygon(coordinates4547)
-  return polygon4547.getArea() // 单位：平方米
-}
-
-
-// ========== 地图初始化 ==========
-const initMap = () => {
+// ==================== 地图初始化 ====================
+function initMap() {
   if (!mapContainer.value) return
-
   map = new Map({
     target: mapContainer.value,
     layers: [basemaps.value[0].layer, basemaps.value[0].roadNetLayer],
-    view: new View({
-      center: fromLonLat([114.04, 22.69]),
-      zoom: 12,
-      projection: 'EPSG:3857'
-    }),
+    view: new View({ center: fromLonLat([114.04, 22.69]), zoom: 12, projection: 'EPSG:3857' }),
     controls: defaults().extend([
       new FullScreen(),
       new ScaleLine(),
-      new MousePosition({
-        coordinateFormat: createStringXY(4),
-        projection: 'EPSG:4326',
-        className: 'custom-mouse-position'
-      })
+      new MousePosition({ coordinateFormat: createStringXY(4), projection: 'EPSG:4326', className: 'custom-mouse-position' })
     ])
   })
-  
-  // 添加要素交互
   setupMapInteractions()
 }
 
-// ========== 底图操作 ==========
+// ==================== 底图操作 ====================
 function switchBasemap(basemapId) {
-  // 基础检查
-  if (!map) return
-  if (activeBasemapId.value === basemapId) return
+  if (!map || activeBasemapId.value === basemapId) return
+  if (basemapId === '3d') { alert('三维地图功能正在开发中…'); return }
   
-  // 特殊处理：三维地图
-  if (basemapId === '3d') {
-    alert('三维地图功能正在开发中…')
-    return
-  }
-  
-  // 移除旧底图
   const oldLayers = map.getLayers().getArray().filter(layer => layer instanceof TileLayer)
   oldLayers.forEach(layer => map.removeLayer(layer))
-
-  // 配置新底图
-  const newBasemap = basemaps.value.find(b => b.id === basemapId)
   
-  // 添加新底图
+  const newBasemap = basemaps.value.find(b => b.id === basemapId)
   map.addLayer(newBasemap.layer)
   map.addLayer(newBasemap.roadNetLayer)
-  
-  // 更新当前选中的底图ID
   activeBasemapId.value = basemapId
 }
 
-function toggleRoadNet(basemap) {
-  if (basemap.roadNetLayer) {
-    basemap.roadNetLayer.setVisible(basemap.roadNetVisible)
-  }
-}
+function toggleRoadNet(basemap) { basemap.roadNetLayer?.setVisible(basemap.roadNetVisible) }
+function getThumbColor(id) { return { vector: '#4CAF50', satellite: '#795548', '3d': '#2196F3' }[id] || '#ccc' }
 
-function getThumbColor(id) {
-  const colors = { vector: '#4CAF50', satellite: '#795548', '3d': '#2196F3' }
-  return colors[id] || '#ccc'
-}
-
-// ========== 图层操作 ==========
+// ==================== 图层操作 ====================
 async function toggleLayer(layerKey) {
   const layerObj = layers.value[layerKey]
   if (layerObj.visible && !layerObj.loaded) {
     const bbox = getMapBbox(map)
-    if (layerKey === 'points') {
-      await vectorStore.loadPoints(bbox)
-    } else {
-      await vectorStore.loadLands(bbox)
-    }
+    if (layerKey === 'points') await vectorStore.loadPoints(bbox)
+    else await vectorStore.loadLands(bbox)
     layerObj.loaded = true
     updateVectorLayer(layerKey)
   } else if (layerObj.layer) {
@@ -678,210 +467,84 @@ function onTypeChange(layerKey) {
   if (layers.value[layerKey].loaded) updateVectorLayer(layerKey)
 }
 
-// 更新矢量图层
 function updateVectorLayer(layerKey) {
   const layerObj = layers.value[layerKey]
   const storeData = layerKey === 'points' ? vectorStore.points : vectorStore.lands
   const isPoint = layerKey === 'points'
   
-  const filteredData = layerObj.selectedType === 'all' 
-    ? storeData 
-    : storeData.filter(item => item.type === layerObj.selectedType)
-  
+  const filteredData = layerObj.selectedType === 'all' ? storeData : storeData.filter(item => item.type === layerObj.selectedType)
   const source = new VectorSource()
   
   filteredData.forEach(item => {
-    const geom = isPoint 
-      ? new Point(fromLonLat(item.geometry.coordinates))
-      : new Polygon(item.geometry.coordinates).transform('EPSG:4326', 'EPSG:3857')
-    
-    // 构建要素属性对象
-    const featureProperties = {
-      id: item.id,
-      name: item.name,
-      layerType: layerKey
-    }
-    
-    // 根据图层类型添加不同属性
-    if (isPoint) {
-      featureProperties.level = item.level
-      featureProperties.type = item.type
-      featureProperties.floor_area = item.floor_area
-      featureProperties.scale = item.scale
-    } else {
-      featureProperties.type = item.type
-      featureProperties.site_area = item.site_area
-    }
-    
-    source.addFeature(new Feature({
-      geometry: geom,
-      ...featureProperties
-    }))
+    const geom = isPoint ? new Point(fromLonLat(item.geometry.coordinates)) : new Polygon(item.geometry.coordinates).transform('EPSG:4326', 'EPSG:3857')
+    const props = { id: item.id, name: item.name, layerType: layerKey }
+    if (isPoint) Object.assign(props, { level: item.level, type: item.type, floor_area: item.floor_area, scale: item.scale })
+    else Object.assign(props, { type: item.type, site_area: item.site_area })
+    source.addFeature(new Feature({ geometry: geom, ...props }))
   })
   
-  // 移除旧图层
   if (layerObj.layer) map.removeLayer(layerObj.layer)
-  
-  // 添加新图层
-  layerObj.layer = new VectorLayer({
-    source,
-    style: isPoint ? createPointsStyle : createLandsStyle,
-    visible: layerObj.visible,
-    zIndex: isPoint ? 3 : 2
-  })
+  layerObj.layer = new VectorLayer({ source, style: isPoint ? createPointsStyle : createLandsStyle, visible: layerObj.visible, zIndex: isPoint ? 3 : 2 })
   map.addLayer(layerObj.layer)
   
-  // 设置编辑交互
   const setupModify = isPoint ? setupPointModify : setupLandsModify
   setupModify(source)
 }
 
-
-// ========== 样式函数 ==========
-// 设施点样式
+// ==================== 样式函数 ====================
 function createPointsStyle(feature) {
   const icon = POINT_STYLES[feature.get('type')] || '📍'
   const name = feature.get('name') || ''
-  
   return [
-    new Style({
-      text: new Text({
-         text: icon,
-         font: 'bold 16px Arial'
-      })
-    }),
-    new Style({
-      text: new Text({
-        text: name,
-        font: '14px Arial',
-        textAlign: 'left',  // 左对齐
-        offsetX: 12,  // 向右偏移12px
-        textBaseline: 'middle',  // 垂直居中
-        stroke: new Stroke({ color: '#fff', width: 1 })  // 白色描边
-      })
-    })
+    new Style({ text: new Text({ text: icon, font: 'bold 16px Arial' }) }),
+    new Style({ text: new Text({ text: name, font: '14px Arial', textAlign: 'left', offsetX: 12, textBaseline: 'middle', stroke: new Stroke({ color: '#fff', width: 1 }) }) })
   ]
 }
 
-// 设施用地样式
 function createLandsStyle(feature) {
-  const type = feature.get('type')
-  let color = LAND_STYLES[type] || 'rgba(0, 0, 0, 0.6)'
-
-  return new Style({
-    fill: new Fill({ color }),
-    stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.2)', width: 1.5 })
-  })
+  const color = LAND_STYLES[feature.get('type')] || 'rgba(0, 0, 0, 0.6)'
+  return new Style({ fill: new Fill({ color }), stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.2)', width: 1.5 }) })
 }
 
+// ==================== 绘制功能 ====================
+function startDrawing(layerKey) { resetForms(); layerKey === 'points' ? pointDraw() : landsDraw() }
 
-// ========== 绘制功能 ==========
-function startDrawing(layerKey) {
-  resetForms()
-  layerKey === 'points' ? pointDraw() : landsDraw()
-}
-
-// 点绘制功能
 function pointDraw() {
   if (drawInteraction) map.removeInteraction(drawInteraction)
-  
   isDrawing.value = true
   
   const source = new VectorSource()
-  drawLayer = new VectorLayer({
-    source,
-    style: new Style({
-      image: new Circle({
-        radius: 4,
-        fill: new Fill({ color: 'purple' })
-      })
-    })
-  })
+  drawLayer = new VectorLayer({ source, style: new Style({ image: new Circle({ radius: 4, fill: new Fill({ color: 'purple' }) }) }) })
   map.addLayer(drawLayer)
   
-  drawInteraction = new Draw({
-    source,
-    type: 'Point',
-    style: new Style({
-      image: new Circle({
-        radius: 4,
-        fill: new Fill({ color: 'purple' })
-      })
-    })
-  })
-
-  drawInteraction.on('drawend', (event) => {
-    drawFeature = event.feature
-    showPointForm.value = true
-  })
-
+  drawInteraction = new Draw({ source, type: 'Point', style: new Style({ image: new Circle({ radius: 4, fill: new Fill({ color: 'purple' }) }) }) })
+  drawInteraction.on('drawend', (event) => { drawFeature = event.feature; showPointForm.value = true })
   map.addInteraction(drawInteraction)
-
-  // ESC键退出绘制
-  const escHandler = (e) => {
-    if (e.key === 'Escape' && isDrawing.value) {
-      cancelDraw()
-      document.removeEventListener('keydown', escHandler)
-    }
-  }
+  
+  const escHandler = (e) => { if (e.key === 'Escape' && isDrawing.value) { cancelDraw(); document.removeEventListener('keydown', escHandler) } }
   document.addEventListener('keydown', escHandler)
 }
 
-// 用地绘制功能
 function landsDraw() {
   if (drawInteraction) map.removeInteraction(drawInteraction)
-
   isDrawing.value = true
   
   const source = new VectorSource()
-  drawLayer = new VectorLayer({
-    source,
-    style: new Style({
-      fill: new Fill({ color: 'rgba(50, 0, 100, 0.3)' }),
-      stroke: new Stroke({ color: 'purple', width: 1.5 })
-    })
-  })
+  drawLayer = new VectorLayer({ source, style: new Style({ fill: new Fill({ color: 'rgba(50, 0, 100, 0.3)' }), stroke: new Stroke({ color: 'purple', width: 1.5 }) }) })
   map.addLayer(drawLayer)
   
-  drawInteraction = new Draw({
-    source,
-    type: 'Polygon',
-    style: new Style({
-      fill: new Fill({ color: 'rgba(50, 0, 100, 0.3)' }),
-      stroke: new Stroke({ color: 'purple', width: 1.5 })
-    })
-  })
-
-  drawInteraction.on('drawend', (event) => {
-    drawFeature = event.feature
-    showLandsForm.value = true
-    removeBackspaceListener()  // 表单弹出时，移除 Backspace 监听器
-  })
-
+  drawInteraction = new Draw({ source, type: 'Polygon', style: new Style({ fill: new Fill({ color: 'rgba(50, 0, 100, 0.3)' }), stroke: new Stroke({ color: 'purple', width: 1.5 }) }) })
+  drawInteraction.on('drawend', (event) => { drawFeature = event.feature; showLandsForm.value = true; removeBackspaceListener() })
   map.addInteraction(drawInteraction)
-
-  // Backspace键删除顶点
-  const backspaceHandler = (e) => {
-    if (e.key === 'Backspace' && isDrawing.value) {
-      e.preventDefault()
-      // 调用 Draw 交互的 removeLastPoint 方法
-      drawInteraction?.removeLastPoint?.()
-    }
-  }
   
-  // Esc键退出绘制
-  const escHandler = (e) => {
-    if (e.key === 'Escape' && isDrawing.value) cancelDraw()
-  }
-  
+  const backspaceHandler = (e) => { if (e.key === 'Backspace' && isDrawing.value) { e.preventDefault(); drawInteraction?.removeLastPoint?.() } }
+  const escHandler = (e) => { if (e.key === 'Escape' && isDrawing.value) cancelDraw() }
   document.addEventListener('keydown', backspaceHandler)
   document.addEventListener('keydown', escHandler)
-  
   drawHandlers.backspace = backspaceHandler
   drawHandlers.esc = escHandler
 }
 
-// 移除 Backspace 监听器的函数
 function removeBackspaceListener() {
   if (drawHandlers.backspace) {
     document.removeEventListener('keydown', drawHandlers.backspace)
@@ -889,126 +552,69 @@ function removeBackspaceListener() {
   }
 }
 
-// ========== 导入导出功能 ==========
-// 导入文件（触发文件选择）
+// ==================== 导入导出功能 ====================
 function handleImport(layerType) {
   importLayerType.value = layerType
-  // 创建隐藏的文件输入
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = '.geojson'
-  input.onchange = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    readGeoJSONFile(file)
-  }
+  input.onchange = (e) => { const file = e.target.files[0]; if (file) readGeoJSONFile(file) }
   input.click()
 }
 
-// 读取并解析 GeoJSON 文件
 function readGeoJSONFile(file) {
   const reader = new FileReader()
   reader.onload = (e) => {
     try {
       const geojson = JSON.parse(e.target.result)
-      // 校验几何类型
       const layerType = importLayerType.value
-      const expectedType = layerType === 'points' ? 'Point' : 'Polygon'
       const features = geojson.features || [geojson]
-      
-      // 过滤出符合几何类型的要素
       const validFeatures = features.filter(f => {
-        const geomType = f.geometry?.type
-        if (layerType === 'lands') {
-          // 面图层：支持 Polygon 和 MultiPolygon
-          return geomType === 'Polygon' || geomType === 'MultiPolygon'
-        } else {
-          // 点图层：支持 Point 和 MultiPoint
-          return geomType === 'Point' || geomType === 'MultiPoint'
-        }
+        const type = f.geometry?.type
+        return layerType === 'lands' ? (type === 'Polygon' || type === 'MultiPolygon') : (type === 'Point' || type === 'MultiPoint')
       })
-      
-      if (validFeatures.length === 0) {
-        alert(`文件中没有有效的${expectedType}数据`)
-        return
-      }
-      
+      if (validFeatures.length === 0) { alert(`文件中没有有效的${layerType === 'points' ? 'Point' : 'Polygon'}数据`); return }
       importFeatures.value = validFeatures
-      // 弹出坐标系选择对话框
       showCoordinateDialogForImport()
-    } catch (err) {
-      alert('文件解析失败，请确保是有效的 GeoJSON 文件')
-      console.error(err)
-    }
+    } catch (err) { alert('文件解析失败，请确保是有效的 GeoJSON 文件') }
   }
   reader.readAsText(file, 'UTF-8')
 }
 
-// 显示坐标系选择对话框
 function showCoordinateDialogForImport() {
-  const select = document.createElement('select')
-  select.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;padding:10px;background:white;border:2px solid #409eff;border-radius:5px;font-size:14px;width:300px;'
-  select.innerHTML = `
-    <option value="">请选择源文件坐标系</option>
-    <option value="EPSG:4326">WGS84 经纬度</option>
-    <option value="EPSG:4547">CGCS2000 / 3度带 114E</option>
-  `
-  
-  const btnGroup = document.createElement('div')
-  btnGroup.style.cssText = 'position:fixed;top:calc(50% + 50px);left:50%;transform:translateX(-50%);z-index:9999;display:flex;gap:10px;'
-  
-  const confirmBtn = document.createElement('button')
-  confirmBtn.textContent = '确定'
-  confirmBtn.style.cssText = 'padding:5px 15px;background:#409eff;color:white;border:none;border-radius:3px;cursor:pointer;'
-  
-  const cancelBtn = document.createElement('button')
-  cancelBtn.textContent = '取消'
-  cancelBtn.style.cssText = 'padding:5px 15px;background:#ccc;color:#333;border:none;border-radius:3px;cursor:pointer;'
-  
-  btnGroup.appendChild(confirmBtn)
-  btnGroup.appendChild(cancelBtn)
-  
   const mask = document.createElement('div')
   mask.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9998;'
   
-  document.body.appendChild(mask)
-  document.body.appendChild(select)
-  document.body.appendChild(btnGroup)
+  const select = document.createElement('select')
+  select.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;padding:10px;background:white;border:2px solid #409eff;border-radius:5px;width:300px;'
+  select.innerHTML = '<option value="" disabled selected hidden>请选择坐标系</option><option value="EPSG:4547">CGCS2000_3度带_114E</option><option value="EPSG:4326">WGS84_经纬度</option>'
   
-  const closeDialog = () => {
-    document.body.removeChild(mask)
-    document.body.removeChild(select)
-    document.body.removeChild(btnGroup)
-  }
+  const btnGroup = document.createElement('div')
+  btnGroup.style.cssText = 'position:fixed;top:calc(50% + 50px);left:50%;transform:translateX(-50%);z-index:9999;display:flex;gap:10px;'
+  const confirmBtn = document.createElement('button')
+  confirmBtn.textContent = '确定'
+  confirmBtn.style.cssText = 'padding:5px 15px;background:#409eff;color:white;border:none;border-radius:3px;cursor:pointer;'
+  const cancelBtn = document.createElement('button')
+  cancelBtn.textContent = '取消'
+  cancelBtn.style.cssText = 'padding:5px 15px;background:#ccc;color:#333;border:none;border-radius:3px;cursor:pointer;'
+  btnGroup.append(confirmBtn, cancelBtn)
+  document.body.append(mask, select, btnGroup)
   
+  const close = () => [mask, select, btnGroup].forEach(el => el.remove())
   confirmBtn.onclick = () => {
-    const sourceEPSG = select.value
-    if (!sourceEPSG) {
+    const epsg = select.value
+    if (!epsg) {
       alert('请选择坐标系')
       return
     }
-    closeDialog()
-    
-    if (sourceEPSG === 'EPSG:4547' && !proj4.defs('EPSG:4547')) {
-      proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
-    }
-    
-    importWithTransform(sourceEPSG)
+    close()
+    if (epsg === 'EPSG:4547' && !proj4.defs('EPSG:4547')) proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
+    importWithTransform(epsg)
   }
-  
-  cancelBtn.onclick = () => {
-    closeDialog()
-    importFeatures.value = []
-    importLayerType.value = null
-  }
+  cancelBtn.onclick = () => { close(); importFeatures.value = []; importLayerType.value = null }
 }
 
-// 执行坐标转换并逐个导入
 async function importWithTransform(sourceEPSG) {
-  if (sourceEPSG === 'EPSG:4547' && !proj4.defs('EPSG:4547')) {
-    proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
-  }
-  
   const targetEPSG = 'EPSG:4326'
   let successCount = 0
   
@@ -1017,69 +623,30 @@ async function importWithTransform(sourceEPSG) {
     let geomType = geom.type
     let coordinates = geom.coordinates
     
-    // 处理 MultiPolygon/MultiPoint
-    if (geomType === 'MultiPolygon') {
-      geomType = 'Polygon'
-      coordinates = coordinates[0]
-    }
-    if (geomType === 'MultiPoint') {
-      geomType = 'Point'
-      coordinates = coordinates[0]
-    }
+    if (geomType === 'MultiPolygon') { geomType = 'Polygon'; coordinates = coordinates[0] }
+    if (geomType === 'MultiPoint') { geomType = 'Point'; coordinates = coordinates[0] }
     
-    // 坐标转换
     if (sourceEPSG !== targetEPSG) {
-      try {
-        coordinates = transformCoordinates(coordinates, sourceEPSG, targetEPSG, geomType)
-      } catch (err) {
-        console.error('坐标转换失败:', err)
-        alert('坐标转换失败，请检查源坐标系选择是否正确')
-        return
-      }
+      try { coordinates = transformCoordinates(coordinates, sourceEPSG, targetEPSG, geomType) }
+      catch (err) { alert('坐标转换失败'); return }
     }
     
-    // 准备表单数据
     const props = feature.properties || {}
     const layerType = importLayerType.value
     
     if (layerType === 'points') {
-      pointsForm.value = {
-        name: props.name || '',
-        level: props.level || '',
-        type: props.type || '',
-        floor_area: props.floor_area || null,
-        scale: props.scale || null
-      }
+      pointsForm.value = { name: props.name || '', level: props.level || '', type: props.type || '', floor_area: props.floor_area || null, scale: props.scale || null }
     } else {
-      landsForm.value = {
-        name: props.name || '',
-        type: props.type || '',
-        site_area: props.site_area || null
-      }
-      // 如果导入的用地没有面积数据，自动计算
+      landsForm.value = { name: props.name || '', type: props.type || '', site_area: props.site_area || null }
       if (!landsForm.value.site_area && geomType === 'Polygon') {
-        const tempCoords = coordinates.map(ring => 
-          ring.map(coord => fromLonLat(coord))
-        )
-        const tempGeometry = new Polygon(tempCoords)
-        landsForm.value.site_area = Math.round(tempGeometry.getArea())
+        const tempCoords = coordinates.map(ring => ring.map(coord => fromLonLat(coord)))
+        landsForm.value.site_area = Math.round(new Polygon(tempCoords).getArea())
       }
     }
     
-    // 存储临时几何信息
     window._tempImportGeometry = { type: geomType, coordinates, layerType }
-    
-    // 弹出表单
-    if (layerType === 'points') {
-      showPointForm.value = true
-    } else {
-      showLandsForm.value = true
-    }
-    
-    // 等待用户保存（通过修改保存函数处理导入）
-    await new Promise((resolve) => {
-      window._resolveImport = resolve
-    })
+    layerType === 'points' ? (showPointForm.value = true) : (showLandsForm.value = true)
+    await new Promise(resolve => window._resolveImport = resolve)
     successCount++
   }
   
@@ -1090,444 +657,211 @@ async function importWithTransform(sourceEPSG) {
   delete window._resolveImport
 }
 
-// 导出图层数据函数
 async function handleExport(layerType) {
   const layerObj = layers.value[layerType]
-  if (!layerObj || !layerObj.layer) {
-    alert('请先加载图层数据')
-    return
-  }
-  
+  if (!layerObj?.layer) { alert('请先加载图层数据'); return }
   const features = layerObj.layer.getSource().getFeatures()
-  if (features.length === 0) {
-    alert('没有可导出的要素')
-    return
-  }
+  if (features.length === 0) { alert('没有可导出的要素'); return }
   
-  // 创建选择框
+  const mask = document.createElement('div')
+  mask.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9998;'
+
   const select = document.createElement('select')
-  select.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;padding:10px;background:white;border:2px solid #409eff;border-radius:5px;font-size:14px;width:300px;'
-  select.innerHTML = `
-    <option value="">请选择导出坐标系</option>
-    <option value="EPSG:4326">WGS84 经纬度</option>
-    <option value="EPSG:4547">CGCS2000 / 3度带 114E</option>
-  `
+  select.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;padding:10px;background:white;border:2px solid #409eff;border-radius:5px;width:300px;'
+  select.innerHTML = '<option value="" disabled selected hidden>请选择坐标系</option><option value="EPSG:4547">CGCS2000_3度带_114E</option><option value="EPSG:4326">WGS84_经纬度</option>'
   
-  // 创建按钮容器
   const btnGroup = document.createElement('div')
   btnGroup.style.cssText = 'position:fixed;top:calc(50% + 50px);left:50%;transform:translateX(-50%);z-index:9999;display:flex;gap:10px;'
-  
   const confirmBtn = document.createElement('button')
   confirmBtn.textContent = '确定'
   confirmBtn.style.cssText = 'padding:5px 15px;background:#409eff;color:white;border:none;border-radius:3px;cursor:pointer;'
-  
   const cancelBtn = document.createElement('button')
   cancelBtn.textContent = '取消'
   cancelBtn.style.cssText = 'padding:5px 15px;background:#ccc;color:#333;border:none;border-radius:3px;cursor:pointer;'
+  btnGroup.append(confirmBtn, cancelBtn)
+  document.body.append(mask, select, btnGroup)
+  const close = () => [mask, select, btnGroup].forEach(el => el.remove())
   
-  btnGroup.appendChild(confirmBtn)
-  btnGroup.appendChild(cancelBtn)
-  
-  // 创建遮罩层
-  const mask = document.createElement('div')
-  mask.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9998;'
-  
-  document.body.appendChild(mask)
-  document.body.appendChild(select)
-  document.body.appendChild(btnGroup)
-  
-  // 关闭弹窗的函数
-  const closeDialog = () => {
-    document.body.removeChild(mask)
-    document.body.removeChild(select)
-    document.body.removeChild(btnGroup)
-  }
-  
-  // 确定按钮事件
   confirmBtn.onclick = () => {
     const targetEPSG = select.value
     if (!targetEPSG) {
       alert('请选择坐标系')
       return
     }
-    closeDialog()
+    close()
     
-    // 定义 EPSG:4547（如果尚未定义）
-    try {
-      if (!proj4.defs('EPSG:4547')) {
-        proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
-      }
-    } catch (e) {
-      console.log('EPSG:4547 已存在或定义失败')
-    }
-    
-    // 构建 GeoJSON
-    const geojson = {
-      type: 'FeatureCollection',
-      crs: {
-        type: 'name',
-        properties: {
-          name: targetEPSG
-        }
-      },
-      features: []
-    }
-    
+    const geojson = { type: 'FeatureCollection', crs: { type: 'name', properties: { name: targetEPSG } }, features: [] }
     for (const feature of features) {
       const props = feature.getProperties()
-      const properties = {
-        name: props.name,
-        type: props.type
-      }
-      if (layerType === 'points') {
-        properties.level = props.level
-        properties.floor_area = props.floor_area
-        properties.scale = props.scale
-      } else {
-        properties.site_area = props.site_area
-      }
+      const properties = { name: props.name, type: props.type }
+      if (layerType === 'points') Object.assign(properties, { level: props.level, floor_area: props.floor_area, scale: props.scale })
+      else properties.site_area = props.site_area
       
       let geom = feature.getGeometry()
       let coordinates = geom.getCoordinates()
       
-      // 坐标转换
       if (targetEPSG === 'EPSG:4326') {
-        if (geom.getType() === 'Point') {
-          coordinates = toLonLat(coordinates)
-        } else if (geom.getType() === 'Polygon') {
-          coordinates = coordinates.map(ring =>
-            ring.map(coord => toLonLat(coord))
-          )
-        }
+        if (geom.getType() === 'Point') coordinates = toLonLat(coordinates)
+        else if (geom.getType() === 'Polygon') coordinates = coordinates.map(ring => ring.map(coord => toLonLat(coord)))
       } else if (targetEPSG === 'EPSG:4547') {
-        if (geom.getType() === 'Point') {
-          const lonlat = toLonLat(coordinates)
-          console.log('原始经纬度:', lonlat)
-          const result = proj4('EPSG:4326', 'EPSG:4547', [lonlat[0], lonlat[1]])
-          console.log('转换后4547坐标:', result)
-          coordinates = result
-        } else if (geom.getType() === 'Polygon') {
-          coordinates = coordinates.map(ring =>
-            ring.map(coord => {
-              const lonlat = toLonLat(coord)
-              const result = proj4('EPSG:4326', 'EPSG:4547', [lonlat[0], lonlat[1]])
-              console.log('转换后4547坐标:', result)
-              return result
-            })
-          )
-        }
+        if (geom.getType() === 'Point') coordinates = proj4('EPSG:4326', 'EPSG:4547', toLonLat(coordinates))
+        else if (geom.getType() === 'Polygon') coordinates = coordinates.map(ring => ring.map(coord => proj4('EPSG:4326', 'EPSG:4547', toLonLat(coord))))
       }
       
-      const featureGeom = {
-        type: geom.getType(),
-        coordinates: coordinates
-      }
-      
-      geojson.features.push({
-        type: 'Feature',
-        geometry: featureGeom,
-        properties: properties
-      })
+      geojson.features.push({ type: 'Feature', geometry: { type: geom.getType(), coordinates }, properties })
     }
     
-    // 下载文件
     const dataStr = JSON.stringify(geojson, null, 2)
     const blob = new Blob([dataStr], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    const timestamp = new Date().toISOString().slice(0,19).replace(/:/g, '-')
-    a.download = `${layerType === 'points' ? '设施点' : '设施用地'}_导出_${timestamp}.geojson`
+    a.download = `${layerType === 'points' ? '设施点' : '设施用地'}_导出_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.geojson`
     a.href = url
     a.click()
     URL.revokeObjectURL(url)
   }
-  
-  // 取消按钮事件
-  cancelBtn.onclick = closeDialog
+  cancelBtn.onclick = close
 }
 
-
-// ========== 编辑功能 ==========
-
-// 操作编辑状态函数
+// ==================== 编辑功能 ====================
 function toggleEditMode(feature) {
   if (!feature) return
-  
-  const layerType = feature.layerType
-  const layerObj = layers.value[layerType]
-  
+  const layerObj = layers.value[feature.layerType]
   if (!layerObj?.loaded) return
   
   if (!isEditing.value) {
-    // 进入编辑图形模式
     isEditing.value = true
-
-    // 获取要编辑的地图要素
     const source = layerObj.layer.getSource()
     const mapFeature = source?.getFeatures().find(f => f.get('id') === feature.id)
-
-    if(mapFeature){
-      // 保存原始几何
+    if (mapFeature) {
       originalGeometry.value = mapFeature.getGeometry().clone()
-      // 激活对应图层的编辑
-      if (layerType === 'points') {
-        pointModify.setActive(true)
-      } else {
-        landsModify.setActive(true)
-      }
+      const modify = feature.layerType === 'points' ? pointModify : landsModify
+      modify.setActive(true)
     }
   } else {
-    // 退出编辑图形模式，进入编辑属性模式
     openEditForm(feature)
   }
 }
 
-// 编辑设施点
 function setupPointModify(source) {
-  if (pointModify) {
-    map.removeInteraction(pointModify)
-    pointModify = null
-  }
-  
-  pointModify = new Modify({source})
-  
+  if (pointModify) map.removeInteraction(pointModify)
+  pointModify = new Modify({ source })
   pointModify.on('modifyend', (event) => {
     const modifiedFeature = event.features.item(0)
     const id = modifiedFeature.get('id')
-    
-    if (selectedFeature.value && selectedFeature.value.id === id) {
-      const coords = toLonLat(modifiedFeature.getGeometry().getCoordinates())
-      
-      // 直接修改现有对象的 geometry 属性
-      selectedFeature.value.geometry = {
-        type: 'Point',
-        coordinates: coords
-      }
+    if (selectedFeature.value?.id === id) {
+      selectedFeature.value.geometry = { type: 'Point', coordinates: toLonLat(modifiedFeature.getGeometry().getCoordinates()) }
     }
   })
-  
   map.addInteraction(pointModify)
   pointModify.setActive(false)
 }
 
-// 编辑设施用地
 function setupLandsModify(source) {
-  if (landsModify) {
-    map.removeInteraction(landsModify)
-    landsModify = null
-  }
-  
-  landsModify = new Modify({source})
-  
-  landsModify.on('modifyend', async (event) => {
+  if (landsModify) map.removeInteraction(landsModify)
+  landsModify = new Modify({ source })
+  landsModify.on('modifyend', (event) => {
     const modifiedFeature = event.features.item(0)
     const id = modifiedFeature.get('id')
-
-    // 更新selectedFeature的数据，保持弹窗显示正常
-    if (selectedFeature.value && selectedFeature.value.id === id) {
+    if (selectedFeature.value?.id === id) {
       const geometry = modifiedFeature.getGeometry()
-      const coords4326 = geometry.getCoordinates().map(ring =>
-        ring.map(coord => toLonLat(coord))
-      )
-
       selectedFeature.value.geometry = {
         type: 'Polygon',
-        coordinates: coords4326
+        coordinates: geometry.getCoordinates().map(ring => ring.map(coord => toLonLat(coord)))
       }
     }
   })
-  
   map.addInteraction(landsModify)
   landsModify.setActive(false)
 }
 
-// 退出编辑模式函数
-function exitEditMode(){
-  // 退出编辑时，如果几何被修改了，就恢复到编辑前状态
-  if(originalGeometry.value && selectedFeature.value){
-    // 获取当前正在编辑的要素
-    const layerType = selectedFeature.value.layerType
-    if (layerType) {
-      const layerObj = layers.value[layerType]
-      const source = layerObj.layer.getSource()
-      const mapFeature = source.getFeatures().find(f => f.get('id') === selectedFeature.value.id)
-      if (mapFeature) {
-        mapFeature.setGeometry(originalGeometry.value.clone())
-      }
-    }
+function exitEditMode() {
+  if (originalGeometry.value && selectedFeature.value) {
+    const layerObj = layers.value[selectedFeature.value.layerType]
+    const source = layerObj.layer.getSource()
+    const mapFeature = source.getFeatures().find(f => f.get('id') === selectedFeature.value.id)
+    if (mapFeature) mapFeature.setGeometry(originalGeometry.value.clone())
     originalGeometry.value = null
   }
-
-  // 关闭编辑交互
   if (pointModify) pointModify.setActive(false)
   if (landsModify) landsModify.setActive(false)
   isEditing.value = false
 }
 
-// 打开属性表单函数
 function openEditForm(feature) {
   if (feature.layerType === 'points') {
-    pointsForm.value = {
-      name: feature.name || '',
-      level: feature.level || '',
-      type: feature.type || '',
-      floor_area: feature.floor_area || null,
-      scale: feature.scale || null
-    }
+    pointsForm.value = { name: feature.name || '', level: feature.level || '', type: feature.type || '', floor_area: feature.floor_area || null, scale: feature.scale || null }
     showPointForm.value = true
   } else {
-    landsForm.value = {
-      name: feature.name || '',
-      type: feature.type || '',
-      site_area: feature.site_area || null
-    }
+    landsForm.value = { name: feature.name || '', type: feature.type || '', site_area: feature.site_area || null }
     showLandsForm.value = true
   }
 }
 
-
-// ========== 数据表单与属性保存 ==========
-// 公共设施数据保存函数
+// ==================== 数据保存 ====================
 async function savePointToDatabase() {
   try {
     if (!pointsForm.value.name) return
-
-    // 判断是否为导入模式
+    
     if (window._tempImportGeometry) {
       const { type, coordinates, layerType } = window._tempImportGeometry
-      
-      if (!pointsForm.value.name) {
-        alert('请输入名称')
-        return
-      }
-      
-      let finalCoordinates = type === 'Point' 
-        ? [Number(coordinates[0]), Number(coordinates[1])]
-        : coordinates
-      
       const response = await createPoints({
-        name: pointsForm.value.name,
-        level: pointsForm.value.level,
-        type: pointsForm.value.type,
-        floor_area: pointsForm.value.floor_area || 0,
-        scale: pointsForm.value.scale || 0,
-        geometry: { type, coordinates: finalCoordinates }
+        name: pointsForm.value.name, level: pointsForm.value.level, type: pointsForm.value.type,
+        floor_area: pointsForm.value.floor_area || 0, scale: pointsForm.value.scale || 0,
+        geometry: { type, coordinates: type === 'Point' ? [Number(coordinates[0]), Number(coordinates[1])] : coordinates }
       })
-      
       if (response.success) {
-        // 刷新图层
         const layerObj = layers.value[layerType]
         if (layerObj.loaded) {
           const bbox = getMapBbox(map)
           await vectorStore.loadPoints(bbox)
           updateVectorLayer(layerType)
         }
-        alert('导入成功！')
         showPointForm.value = false
-        pointsForm.value = { name: '', type: '', address: '', capacity: null, admin_region: '' }
-        
-        // 触发下一个要素
         if (window._resolveImport) window._resolveImport()
       }
       return
     }
-
-    // 判断是编辑还是新增
-    if (selectedFeature.value && selectedFeature.value.id) {
-      // ========== 编辑现有设施 ==========
+    
+    if (selectedFeature.value?.id) {
       const id = selectedFeature.value.id
-
-      // 获取当前几何（可能已被拖动修改）
       const source = layers.value.points.layer?.getSource()
       const feature = source?.getFeatures().find(f => f.get('id') === id)
-
-      // 获取最新几何坐标
       let geometry = selectedFeature.value.geometry
-      if (feature) {
-        const coords = toLonLat(feature.getGeometry().getCoordinates())
-        geometry = {
-          type: 'Point',
-          coordinates: coords
-        }
-      }
-
-      const updateData = {
-        name: pointsForm.value.name,
-        level: pointsForm.value.level,
-        type: pointsForm.value.type,
-        floor_area: pointsForm.value.floor_area || 0,
-        scale: pointsForm.value.scale || 0,
-        geometry: geometry
-      }
-
+      if (feature) geometry = { type: 'Point', coordinates: toLonLat(feature.getGeometry().getCoordinates()) }
+      
+      const updateData = { name: pointsForm.value.name, level: pointsForm.value.level, type: pointsForm.value.type, floor_area: pointsForm.value.floor_area || 0, scale: pointsForm.value.scale || 0, geometry }
       const response = await updatePoints(id, updateData)
-
       if (response.success) {
-        // 更新地图要素的属性
         if (feature) {
-          // 更新几何（保持修改后的状态）
-          const currentGeom = feature.getGeometry()
-          feature.setGeometry(currentGeom.clone())
-
-          // 更新属性
+          feature.setGeometry(feature.getGeometry().clone())
           feature.set('name', pointsForm.value.name)
           feature.set('level', pointsForm.value.level)
           feature.set('type', pointsForm.value.type)
           feature.set('floor_area', pointsForm.value.floor_area)
           feature.set('scale', pointsForm.value.scale)
         }
-
-        // 更新 store
         const index = vectorStore.points.findIndex(p => p.id === id)
-        if (index !== -1) {
-          vectorStore.points[index] = {
-            ...vectorStore.points[index],
-            ...updateData,
-            id: id
-          }
-        }
-
-        // 更新弹窗显示
-        selectedFeature.value = {
-          ...selectedFeature.value,
-          ...updateData,
-          id: id
-        }
+        if (index !== -1) vectorStore.points[index] = { ...vectorStore.points[index], ...updateData, id }
+        selectedFeature.value = { ...selectedFeature.value, ...updateData, id }
 
         alert('更新成功！')
 
-        // 关闭编辑交互
-        if (pointModify) pointModify.setActive(false)
-
-        // 关闭要素弹窗（但不触发 exitEditMode）
+        pointModify.setActive(false)
         selectedFeature.value = null
         popupPosition.value = null
-
-        // 清理编辑状态（几何已正确保存，不再需要原始几何）
         isEditing.value = false
         originalGeometry.value = null
-
-        // 关闭属性表单
         showPointForm.value = false
       }
     } else {
-      // ========== 创建新设施 ==========
       if (!drawFeature) return
-
       const response = await createPoints({
-        name: pointsForm.value.name,
-        level: pointsForm.value.level,
-        type: pointsForm.value.type,
-        floor_area: pointsForm.value.floor_area || 0,
-        scale: pointsForm.value.scale || 0,
-        geometry: {
-          type: 'Point',
-          coordinates: toLonLat(drawFeature.getGeometry().getCoordinates())
-        }
+        name: pointsForm.value.name, level: pointsForm.value.level, type: pointsForm.value.type,
+        floor_area: pointsForm.value.floor_area || 0, scale: pointsForm.value.scale || 0,
+        geometry: { type: 'Point', coordinates: toLonLat(drawFeature.getGeometry().getCoordinates()) }
       })
-
       if (response.success) {
-        // 将新要素添加到地图
         const newFeature = drawFeature.clone()
         newFeature.set('id', response.data.id)
         newFeature.set('name', pointsForm.value.name)
@@ -1536,225 +870,130 @@ async function savePointToDatabase() {
         newFeature.set('floor_area', pointsForm.value.floor_area)
         newFeature.set('scale', pointsForm.value.scale)
         newFeature.set('layerType', 'points')
-
         layers.value.points.layer?.getSource()?.addFeature(newFeature)
         vectorStore.points.push(response.data)
 
-        alert('添加成功！')
-        cancelDraw() // 关闭表单并清理绘制状态
+        alert('绘制成功！')
+
+        cancelDraw()
       }
     }
   } catch (error) {
-    console.error('保存失败:', error)
     alert('保存失败：' + error.message)
   }
 }
 
-// 土地利用数据保存函数
 async function saveLandsToDatabase() {
   try {
     if (!landsForm.value.name) return
-
-    // 判断是否为导入模式
+    
     if (window._tempImportGeometry) {
       const { type, coordinates, layerType } = window._tempImportGeometry
-      
-      if (!landsForm.value.name) {
-        alert('请输入名称')
-        return
-      }
-      
-      // 【关键】确保坐标是数字类型，去除可能的多余维度
       let finalCoordinates = coordinates
-      if (type === 'Polygon') {
-        finalCoordinates = coordinates.map(ring =>
-          ring.map(point => [Number(point[0]), Number(point[1])])
-        )
-      } else if (type === 'Point') {
-        finalCoordinates = [Number(coordinates[0]), Number(coordinates[1])]
-      }
+      if (type === 'Polygon') finalCoordinates = coordinates.map(ring => ring.map(point => [Number(point[0]), Number(point[1])]))
+      else if (type === 'Point') finalCoordinates = [Number(coordinates[0]), Number(coordinates[1])]
       
-      // 打印最终要发送的数据
-      const postData = {
-        name: landsForm.value.name,
-        type: landsForm.value.type,
-        site_area: landsForm.value.site_area || 0,
-        geometry: { 
-          type: type, 
-          coordinates: finalCoordinates 
+      const response = await createLands({
+        name: landsForm.value.name, type: landsForm.value.type, site_area: landsForm.value.site_area || 0,
+        geometry: { type, coordinates: finalCoordinates }
+      })
+      if (response?.success) {
+        const layerObj = layers.value[layerType]
+        if (layerObj?.loaded) {
+          const bbox = getMapBbox(map)
+          await vectorStore.loadLands(bbox)
+          updateVectorLayer(layerType)
         }
-      }
-      
-      try {
-        const response = await createLands(postData)
-        
-        if (response && response.success) {
-          // 刷新图层
-          const layerObj = layers.value[layerType]
-          if (layerObj && layerObj.loaded) {
-            const bbox = getMapBbox(map)
-            await vectorStore.loadLands(bbox)
-            updateVectorLayer(layerType)
-          }
-          alert('导入成功！')
-          showLandsForm.value = false
-          landsForm.value = { name: '', type: '', site_area: null }
-          
-          delete window._tempImportGeometry
-          if (window._resolveImport) window._resolveImport()
-        } else {
-          console.error('导入失败:', response)
-          alert(`导入失败: ${response?.message || '未知错误'}`)
-        }
-      } catch (error) {
-        console.error('导入异常:', error)
-        alert(`导入异常: ${error.message}`)
+        showLandsForm.value = false
+        delete window._tempImportGeometry
+        if (window._resolveImport) window._resolveImport()
       }
       return
     }
-
-    // 判断是编辑还是新增
-    if (selectedFeature.value && selectedFeature.value.id) {
-      // ========== 编辑现有用地 ==========
+    
+    if (selectedFeature.value?.id) {
       const id = selectedFeature.value.id
-
-      // 获取当前几何（可能已被拖动修改）
       const source = layers.value.lands.layer?.getSource()
       const feature = source?.getFeatures().find(f => f.get('id') === id)
-
-      // 获取最新几何坐标
       let geometry = selectedFeature.value.geometry
       if (feature) {
-        const geometry3857 = feature.getGeometry()
-        const coords4326 = geometry3857.getCoordinates().map(ring =>
-          ring.map(coord => toLonLat(coord))
-        )
         geometry = {
           type: 'Polygon',
-          coordinates: coords4326
+          coordinates: feature.getGeometry().getCoordinates().map(ring => ring.map(coord => toLonLat(coord)))
         }
       }
-
-      const updateData = {
-        name: landsForm.value.name,
-        type: landsForm.value.type,
-        site_area: landsForm.value.site_area || 0,
-        geometry: geometry
-      }
-
+      
+      const updateData = { name: landsForm.value.name, type: landsForm.value.type, site_area: landsForm.value.site_area || 0, geometry }
       const response = await updateLands(id, updateData)
-
       if (response.success) {
-        // 更新地图要素的属性
         if (feature) {
           feature.set('name', landsForm.value.name)
           feature.set('type', landsForm.value.type)
           feature.set('site_area', landsForm.value.site_area)
         }
-
-        // 更新 store
         const index = vectorStore.lands.findIndex(l => l.id === id)
-        if (index !== -1) {
-          vectorStore.lands[index] = {
-            ...vectorStore.lands[index],
-            ...updateData,
-            id: id
-          }
-        }
-
-        // 更新弹窗显示
-        selectedFeature.value = {
-          ...selectedFeature.value,
-          ...updateData,
-          id: id
-        }
+        if (index !== -1) vectorStore.lands[index] = { ...vectorStore.lands[index], ...updateData, id }
+        selectedFeature.value = { ...selectedFeature.value, ...updateData, id }
 
         alert('更新成功！')
 
-        // 关闭编辑交互
-        if (landsModify) landsModify.setActive(false)
-
-        // 关闭要素弹窗（但不触发 exitEditMode）
+        landsModify.setActive(false)
         selectedFeature.value = null
         popupPosition.value = null
-
-        // 清理编辑状态（几何已正确保存，不再需要原始几何）
         isEditing.value = false
         originalGeometry.value = null
-
-        // 关闭属性表单
         showLandsForm.value = false
       }
     } else {
-      // ========== 创建新用地 ==========
       if (!drawFeature) return
-
       const response = await createLands({
-        name: landsForm.value.name,
-        type: landsForm.value.type,
-        site_area: landsForm.value.site_area || 0,
+        name: landsForm.value.name, type: landsForm.value.type, site_area: landsForm.value.site_area || 0,
         geometry: {
           type: 'Polygon',
-          coordinates: drawFeature.getGeometry().getCoordinates().map(ring =>
-            ring.map(coord => toLonLat(coord))
-          )
+          coordinates: drawFeature.getGeometry().getCoordinates().map(ring => ring.map(coord => toLonLat(coord)))
         }
       })
-
       if (response.success) {
-        // 将新要素添加到地图
         const newFeature = drawFeature.clone()
         newFeature.set('id', response.data.id)
         newFeature.set('name', landsForm.value.name)
         newFeature.set('type', landsForm.value.type)
         newFeature.set('site_area', landsForm.value.site_area)
         newFeature.set('layerType', 'lands')
-
         layers.value.lands.layer?.getSource()?.addFeature(newFeature)
         vectorStore.lands.push(response.data)
 
-        alert('添加成功！')
+        alert('绘制成功！')
+
         cancelDraw()
       }
     }
   } catch (error) {
-    console.error('保存失败:', error)
     alert('保存失败：' + error.message)
   }
 }
 
-// ========== 删除功能 ==========
+// ==================== 删除功能 ====================
 async function deleteFeature(featureId) {
   if (!selectedFeature.value) return
-  
   const layerType = selectedFeature.value.layerType
-  const featureName = layerType === 'points' ? '设施' : '图形'
-  if (!confirm(`确定要删除这个${featureName}吗？`)) return
+  if (!confirm(`确定要删除这个${layerType === 'points' ? '设施' : '图形'}吗？`)) return
   
   try {
-    if (layerType === 'points') {
-      await deletePoints(featureId)
-    } else if (layerType === 'lands') {
-      await deleteLands(featureId)
-    }
+    if (layerType === 'points') await deletePoints(featureId)
+    else await deleteLands(featureId)
     
     const source = layers.value[layerType]?.layer?.getSource()
     const feature = source?.getFeatures().find(f => f.get('id') === featureId)
     if (feature) source.removeFeature(feature)
     
-    if (layerType === 'points') {
-      vectorStore.points = vectorStore.points.filter(item => item.id !== featureId)
-    } else {
-      vectorStore.lands = vectorStore.lands.filter(item => item.id !== featureId)
-    }
+    if (layerType === 'points') vectorStore.points = vectorStore.points.filter(item => item.id !== featureId)
+    else vectorStore.lands = vectorStore.lands.filter(item => item.id !== featureId)
     
     closePopup()
+
     alert('删除成功')
-    
   } catch (error) {
-    console.error('删除API调用失败:', error)
-    alert('后端删除API未实现，刷新页面后会恢复')
-    
     const source = layers.value[layerType]?.layer?.getSource()
     const feature = source?.getFeatures().find(f => f.get('id') === featureId)
     if (feature) source.removeFeature(feature)
@@ -1762,52 +1001,34 @@ async function deleteFeature(featureId) {
   }
 }
 
-// ========== 交互设置 ==========
+// ==================== 交互与工具 ====================
 function setupMapInteractions() {
   map.on('click', (event) => {
-    if(showLandsForm.value || isDrawing.value || showPointForm.value || isEditing.value) return
-
+    if (showLandsForm.value || isDrawing.value || showPointForm.value || isEditing.value) return
     const features = map.getFeaturesAtPixel(event.pixel)
-
-    if(features.length > 0) {
-      // 每次点击都重新获取要素属性
-      const feature = features[0]
-      const properties = feature.getProperties()
-      // 如果处于编辑模式且点击的要素是当前正在编辑的要素，则不做任何操作，保持编辑状态
-      if (isEditing.value && selectedFeature.value && selectedFeature.value.id === properties.id) {
-        return
-      }
-      // 如果之前处于编辑模式，且点击了其他要素，退出编辑
-      if(isEditing.value){
-        exitEditMode()
-      }
+    if (features.length > 0) {
+      const properties = features[0].getProperties()
+      if (isEditing.value && selectedFeature.value?.id === properties.id) return
+      if (isEditing.value) exitEditMode()
       selectedFeature.value = properties
       popupPosition.value = { x: event.pixel[0] + 20, y: event.pixel[1] }
     } else {
       closePopup()
     }
   })
-
+  
   map.on('pointermove', (event) => {
-    const hit = map.hasFeatureAtPixel(event.pixel)
-    map.getTargetElement().style.cursor = hit ? 'pointer' : ''
+    map.getTargetElement().style.cursor = map.hasFeatureAtPixel(event.pixel) ? 'pointer' : ''
   })
 }
 
-// ========== 工具函数 ==========
 function closePopup() {
-  // 如何正在编辑模式，放弃编辑并恢复到编辑前状态
-  if (isEditing.value) {
-    exitEditMode()
-    return  // 编辑模式下不清空selectedFeature，确保弹窗数据正常
-  }
+  if (isEditing.value) { exitEditMode(); return }
   selectedFeature.value = null
   popupPosition.value = null
 }
 
-// 取消绘制函数
 function cancelDraw() {
-  // 导入模式处理
   if (window._tempImportGeometry && window._resolveImport) {
     showLandsForm.value = false
     showPointForm.value = false
@@ -1818,67 +1039,36 @@ function cancelDraw() {
     return
   }
   
-  // 清理表单状态
   showLandsForm.value = false
   showPointForm.value = false
   resetForms()
-
-  // 清理绘制状态
   drawFeature = null
   isDrawing.value = false
   
-  // 统一清理键盘事件
   Object.entries(drawHandlers).forEach(([key, handler]) => {
-    if (handler) {
-      document.removeEventListener('keydown', handler)
-      drawHandlers[key] = null
-    }
+    if (handler) { document.removeEventListener('keydown', handler); drawHandlers[key] = null }
   })
-
-  // 清理绘制交互和图层
-  if (drawInteraction) {
-    map.removeInteraction(drawInteraction)
-    drawInteraction = null
-  }
-
-  if (drawLayer) {
-    map.removeLayer(drawLayer)
-    drawLayer = null
-  }
+  
+  if (drawInteraction) { map.removeInteraction(drawInteraction); drawInteraction = null }
+  if (drawLayer) { map.removeLayer(drawLayer); drawLayer = null }
 }
 
-// ========== 生命周期 ==========
+// ==================== 生命周期 ====================
 onMounted(() => {
   if (!mapContainer.value) return
   initMap()
-
-  // 添加ECS键盘监听
+  
   escHandler = (e) => {
-    if (e.key === 'Escape') {
-      // 表单弹窗优先
-      if (showPointForm.value || showLandsForm.value) {
-        cancelDraw()
-      } 
-      // 几何编辑模式
-      else if (isEditing.value) {
-        exitEditMode()
-        closePopup()
-      }
-    }
+    if (e.key !== 'Escape') return
+    if (showPointForm.value || showLandsForm.value) cancelDraw()
+    else if (isEditing.value) { exitEditMode(); closePopup() }
   }
   document.addEventListener('keydown', escHandler)
 })
 
 onUnmounted(() => {
-  // 移除ECS键盘监听
-  if (escHandler) {
-    document.removeEventListener('keydown', escHandler)
-  }
-
-  if(map) {
-    map.setTarget(null)
-    map = null
-  }
+  if (escHandler) document.removeEventListener('keydown', escHandler)
+  if (map) { map.setTarget(null); map = null }
 })
 </script>
 
