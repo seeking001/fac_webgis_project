@@ -258,6 +258,7 @@ import { createStringXY } from "ol/coordinate"
 import { Draw, Modify } from 'ol/interaction'
 
 // 8、工具库
+import { getArea } from 'ol/sphere'
 import { fromLonLat, toLonLat } from 'ol/proj'
 import proj4 from 'proj4'
 
@@ -525,53 +526,69 @@ function resetForms() {
 
 // 自动计算用地面积函数
 function calcArea() {
-  let mapFeature = null
+  let coordinates4326 = null
   
-  // 1. 优先检查导入模式
+  // 1. 导入模式：直接从临时几何获取（已经是4326）
   if (window._tempImportGeometry && window._tempImportGeometry.layerType === 'lands') {
     const { coordinates, type } = window._tempImportGeometry
-    
-    // 根据几何类型创建临时 Feature 用于计算面积
     if (type === 'Polygon') {
-      // 将坐标转换为3857用于面积计算
-      const transformedCoords = coordinates.map(ring => 
-        ring.map(coord => {
-          // 如果坐标是4326，转换为3857
-          if (coord.length === 2 && Math.abs(coord[0]) <= 180) {
-            return fromLonLat(coord)
-          }
-          return coord
-        })
-      )
-      
-      const tempFeature = new Feature({
-        geometry: new Polygon(transformedCoords)
-      })
-      mapFeature = tempFeature
+      coordinates4326 = coordinates
     }
   }
   
-  // 2. 编辑模式：从地图图层获取
-  if (!mapFeature && selectedFeature.value && selectedFeature.value.layerType === 'lands') {
+  // 2. 编辑/查看模式：从地图要素获取（3857），需要转换
+  if (!coordinates4326 && selectedFeature.value && selectedFeature.value.layerType === 'lands') {
     const source = layers.value.lands.layer?.getSource()
-    mapFeature = source?.getFeatures().find(f => f.get('id') === selectedFeature.value.id)
+    const mapFeature = source?.getFeatures().find(f => f.get('id') === selectedFeature.value.id)
+    if (mapFeature) {
+      const geometry3857 = mapFeature.getGeometry()
+      if (geometry3857 && geometry3857.getType() === 'Polygon') {
+        // 将3857坐标转换为4326
+        coordinates4326 = geometry3857.getCoordinates().map(ring =>
+          ring.map(coord => toLonLat(coord))
+        )
+      }
+    }
   }
   
-  // 3. 绘制模式：使用 drawFeature
-  if (!mapFeature && drawFeature) {
-    mapFeature = drawFeature
+  // 3. 绘制模式：从绘制的要素获取（3857），需要转换
+  if (!coordinates4326 && drawFeature) {
+    const geometry3857 = drawFeature.getGeometry()
+    if (geometry3857 && geometry3857.getType() === 'Polygon') {
+      coordinates4326 = geometry3857.getCoordinates().map(ring =>
+        ring.map(coord => toLonLat(coord))
+      )
+    }
   }
   
-  if (!mapFeature) {
+  if (!coordinates4326) {
     alert('请先绘制或选择用地')
     return
   }
   
-  const geometry = mapFeature.getGeometry()
-  if (!geometry) return
+  // 计算面积：将4326坐标转换到4547投影计算
+  const area = calculateAreaInEPSG4547(coordinates4326)
+  landsForm.value.site_area = Math.round(area)
+}
+
+// 在 EPSG:4547 投影下计算面积
+function calculateAreaInEPSG4547(coordinates4326) {
+  // 确保 EPSG:4547 已定义
+  if (!proj4.defs('EPSG:4547')) {
+    proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
+  }
   
-  const area = Math.round(geometry.getArea())
-  landsForm.value.site_area = area
+  // 将4326坐标转换到4547
+  const coordinates4547 = coordinates4326.map(ring =>
+    ring.map(coord => {
+      const result = proj4('EPSG:4326', 'EPSG:4547', coord)
+      return [result[0], result[1]]
+    })
+  )
+  
+  // 创建4547投影的多边形并计算面积
+  const polygon4547 = new Polygon(coordinates4547)
+  return polygon4547.getArea() // 单位：平方米
 }
 
 
@@ -661,67 +678,62 @@ function onTypeChange(layerKey) {
   if (layers.value[layerKey].loaded) updateVectorLayer(layerKey)
 }
 
+// 更新矢量图层
 function updateVectorLayer(layerKey) {
   const layerObj = layers.value[layerKey]
   const storeData = layerKey === 'points' ? vectorStore.points : vectorStore.lands
-  const styleFunc = layerKey === 'points' ? createPointsStyle : createLandsStyle
   const isPoint = layerKey === 'points'
-
+  
   const filteredData = layerObj.selectedType === 'all' 
     ? storeData 
     : storeData.filter(item => item.type === layerObj.selectedType)
-
+  
   const source = new VectorSource()
+  
   filteredData.forEach(item => {
     const geom = isPoint 
       ? new Point(fromLonLat(item.geometry.coordinates))
       : new Polygon(item.geometry.coordinates).transform('EPSG:4326', 'EPSG:3857')
     
-    if (isPoint) {
-      // 点要素
-      const feature = new Feature({
-        geometry: geom,
-        id: item.id,
-        name: item.name,
-        level: item.level,
-        type: item.type,
-        layerType: layerKey,
-        floor_area: item.floor_area,
-        scale: item.scale
-      });
-      source.addFeature(feature)
-    } else {
-      // 面要素
-      const feature = new Feature({
-        geometry: geom,
-        id: item.id,
-        name: item.name,
-        type: item.type,
-        layerType: layerKey,
-        site_area: item.site_area
-      });
-      source.addFeature(feature)
+    // 构建要素属性对象
+    const featureProperties = {
+      id: item.id,
+      name: item.name,
+      layerType: layerKey
     }
+    
+    // 根据图层类型添加不同属性
+    if (isPoint) {
+      featureProperties.level = item.level
+      featureProperties.type = item.type
+      featureProperties.floor_area = item.floor_area
+      featureProperties.scale = item.scale
+    } else {
+      featureProperties.type = item.type
+      featureProperties.site_area = item.site_area
+    }
+    
+    source.addFeature(new Feature({
+      geometry: geom,
+      ...featureProperties
+    }))
   })
-
+  
   // 移除旧图层
   if (layerObj.layer) map.removeLayer(layerObj.layer)
   
   // 添加新图层
   layerObj.layer = new VectorLayer({
     source,
-    style: styleFunc,
+    style: isPoint ? createPointsStyle : createLandsStyle,
     visible: layerObj.visible,
-    zIndex: layerKey === 'points' ? 3 : 2
+    zIndex: isPoint ? 3 : 2
   })
   map.addLayer(layerObj.layer)
-
+  
   // 设置编辑交互
-  if (layerKey === 'points') {
-    setupPointModify(source)
-  } else if (layerKey === 'lands') {
-    setupLandsModify(source)
-  }
+  const setupModify = isPoint ? setupPointModify : setupLandsModify
+  setupModify(source)
 }
 
 
@@ -843,6 +855,7 @@ function landsDraw() {
   drawInteraction.on('drawend', (event) => {
     drawFeature = event.feature
     showLandsForm.value = true
+    removeBackspaceListener()  // 表单弹出时，移除 Backspace 监听器
   })
 
   map.addInteraction(drawInteraction)
@@ -866,6 +879,14 @@ function landsDraw() {
   
   drawHandlers.backspace = backspaceHandler
   drawHandlers.esc = escHandler
+}
+
+// 移除 Backspace 监听器的函数
+function removeBackspaceListener() {
+  if (drawHandlers.backspace) {
+    document.removeEventListener('keydown', drawHandlers.backspace)
+    drawHandlers.backspace = null
+  }
 }
 
 // ========== 导入导出功能 ==========
@@ -1268,7 +1289,7 @@ function setupPointModify(source) {
     pointModify = null
   }
   
-  pointModify = new Modify({ source })
+  pointModify = new Modify({source})
   
   pointModify.on('modifyend', (event) => {
     const modifiedFeature = event.features.item(0)
@@ -1296,7 +1317,7 @@ function setupLandsModify(source) {
     landsModify = null
   }
   
-  landsModify = new Modify({ source })
+  landsModify = new Modify({source})
   
   landsModify.on('modifyend', async (event) => {
     const modifiedFeature = event.features.item(0)
