@@ -303,9 +303,9 @@ const basemaps = ref([
 // 矢量图层配置
 const layers = ref({
   points: {
-    name: '设施点', visible: false, loaded: false, layer: null, selectedType: 'all',
+    name: '设施点', visible: false, loaded: false, layer: null, selectedType: '全部类型',
     types: [
-      { label: '全部类型', value: 'all' },
+      { label: '全部类型', value: '全部类型' },
       { label: '行政办公场所', value: '行政办公场所' }, { label: '社区管理机构', value: '社区管理机构' },
       { label: '大型文化设施', value: '大型文化设施' }, { label: '大型体育设施', value: '大型体育设施' },
       { label: '社区文化设施', value: '社区文化设施' }, { label: '社区体育设施', value: '社区体育设施' },
@@ -318,9 +318,9 @@ const layers = ref({
     ]
   },
   lands: {
-    name: '设施用地', visible: false, loaded: false, layer: null, selectedType: 'all',
+    name: '设施用地', visible: false, loaded: false, layer: null, selectedType: '全部类型',
     types: [
-      { label: '全部类型', value: 'all' },
+      { label: '全部类型', value: '全部类型' },
       { label: '商业用地', value: '商业用地' }, { label: '居住用地', value: '居住用地' }, { label: '工业用地', value: '工业用地' },
       { label: '公园绿地', value: '公园绿地' }, { label: '行政管理用地', value: '行政管理用地' }, { label: '文体设施用地', value: '文体设施用地' },
       { label: '医疗卫生用地', value: '医疗卫生用地' }, { label: '教育设施用地', value: '教育设施用地' }, { label: '社会福利用地', value: '社会福利用地' }
@@ -473,7 +473,7 @@ function updateVectorLayer(layerKey) {
   const storeData = layerKey === 'points' ? vectorStore.points : vectorStore.lands
   const isPoint = layerKey === 'points'
   
-  const filteredData = layerObj.selectedType === 'all' ? storeData : storeData.filter(item => item.type === layerObj.selectedType)
+  const filteredData = layerObj.selectedType === '全部类型' ? storeData : storeData.filter(item => item.type === layerObj.selectedType)
   const source = new VectorSource()
   
   filteredData.forEach(item => {
@@ -1377,6 +1377,7 @@ onUnmounted(() => {
 }
 .control-group select {
   padding: 3px 5px;
+  width: 190px;
   font-size: 14px;
   border-radius: 5px;
   border: none;
