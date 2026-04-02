@@ -95,6 +95,7 @@
           <button @click="toggleEditMode(selectedFeature)" class="edit-btn" :class="{ 'active': isEditing }">
             {{ isEditing ? '编辑属性' : '编辑图形' }}
           </button>
+          <button @click="exportSingleFeature(selectedFeature)" class="export-btn">导出数据</button>
           <button v-if="selectedFeature" @click="deleteFeature(selectedFeature.id)" class="delete-btn">
             删除{{ selectedFeature.layerType === 'points' ? '设施' : '用地' }}
           </button>
@@ -720,6 +721,121 @@ async function handleExport(layerType) {
     a.click()
     URL.revokeObjectURL(url)
   }
+  cancelBtn.onclick = close
+}
+
+// 单个要素导出函数
+async function exportSingleFeature(feature) {
+  // 创建坐标系选择对话框
+  const mask = document.createElement('div')
+  mask.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9998;'
+  
+  const select = document.createElement('select')
+  select.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;padding:10px;background:white;border:2px solid #409eff;border-radius:5px;width:300px;'
+  select.innerHTML = '<option value="" disabled selected hidden>请选择坐标系</option><option value="EPSG:4547">CGCS2000_3度带_114E</option><option value="EPSG:4326">WGS84_经纬度</option>'
+  
+  const btnGroup = document.createElement('div')
+  btnGroup.style.cssText = 'position:fixed;top:calc(50% + 50px);left:50%;transform:translateX(-50%);z-index:9999;display:flex;gap:10px;'
+  const confirmBtn = document.createElement('button')
+  confirmBtn.textContent = '确定'
+  confirmBtn.style.cssText = 'padding:5px 15px;background:#409eff;color:white;border:none;border-radius:3px;cursor:pointer;'
+  const cancelBtn = document.createElement('button')
+  cancelBtn.textContent = '取消'
+  cancelBtn.style.cssText = 'padding:5px 15px;background:#ccc;color:#333;border:none;border-radius:3px;cursor:pointer;'
+  btnGroup.appendChild(confirmBtn)
+  btnGroup.appendChild(cancelBtn)
+  
+  document.body.appendChild(mask)
+  document.body.appendChild(select)
+  document.body.appendChild(btnGroup)
+  
+  const close = () => {
+    document.body.removeChild(mask)
+    document.body.removeChild(select)
+    document.body.removeChild(btnGroup)
+  }
+  
+  confirmBtn.onclick = () => {
+    const targetEPSG = select.value
+    if (!targetEPSG) {
+      alert('请选择坐标系')
+      return
+    }
+    close()
+    
+    const layerType = feature.layerType
+    const geomType = layerType === 'points' ? 'Point' : 'Polygon'
+    
+    // 获取几何坐标（从地图要素中获取，确保坐标正确）
+    const source = layers.value[layerType]?.layer?.getSource()
+    const mapFeature = source?.getFeatures().find(f => f.get('id') === feature.id)
+    
+    if (!mapFeature) {
+      alert('未找到要素数据')
+      return
+    }
+    
+    const geometry = mapFeature.getGeometry()
+    let coordinates
+    
+    // 获取原始坐标（3857），然后转换为4326
+    if (geomType === 'Point') {
+      const coords3857 = geometry.getCoordinates()
+      coordinates = toLonLat(coords3857)
+    } else {
+      const coords3857 = geometry.getCoordinates()
+      coordinates = coords3857.map(ring =>
+        ring.map(coord => toLonLat(coord))
+      )
+    }
+    
+    // 如果需要转换到4547
+    if (targetEPSG === 'EPSG:4547') {
+      if (geomType === 'Point') {
+        coordinates = proj4('EPSG:4326', 'EPSG:4547', coordinates)
+      } else {
+        coordinates = coordinates.map(ring =>
+          ring.map(coord => proj4('EPSG:4326', 'EPSG:4547', coord))
+        )
+      }
+    }
+    
+    // 构建属性
+    const properties = {
+      name: feature.name,
+      type: feature.type
+    }
+    if (layerType === 'points') {
+      properties.level = feature.level
+      properties.floor_area = feature.floor_area
+      properties.scale = feature.scale
+    } else {
+      properties.site_area = feature.site_area
+    }
+    
+    // 构建 GeoJSON
+    const geojson = {
+      type: 'FeatureCollection',
+      crs: { type: 'name', properties: { name: targetEPSG } },
+      features: [{
+        type: 'Feature',
+        geometry: { type: geomType, coordinates },
+        properties: properties
+      }]
+    }
+    
+    // 下载文件
+    const dataStr = JSON.stringify(geojson, null, 2)
+    const blob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const timestamp = new Date().toISOString().slice(0,19).replace(/:/g, '-')
+    a.download = `${layerType === 'points' ? '设施点' : '设施用地'}_${feature.name || '要素'}_${timestamp}.geojson`
+    a.href = url
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  
   cancelBtn.onclick = close
 }
 
@@ -1419,6 +1535,20 @@ onUnmounted(() => {
 
 .edit-btn.active {
   background: rgba(150, 0, 100, 0.8);
+}
+
+.export-btn {
+  margin-top: 5px;
+  padding: 2px 6px;
+  background: rgba(50, 0, 100, 0.5);
+  font-size: 12px;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.export-btn:hover {
+  background: rgb(50, 0, 100);
 }
 
 .delete-btn {
