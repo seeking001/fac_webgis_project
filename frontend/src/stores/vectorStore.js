@@ -11,17 +11,17 @@ export const useVectorStore = defineStore('vectorStore', () => {
   const lands = ref([]);
 
   // 创建异步函数加载公共服务设施数据
-  async function loadPoints(bbox = null) {
-    // 调用API服务，传递bbox参数
-    const response = await getPoints(bbox);
+  async function loadPoints() {
+    // 调用API服务
+    const response = await getPoints();
 
     // 接收后端返回的设施数据
     points.value = response.data;
   }
 
   // 创建异步函数加载土地利用数据
-  async function loadLands(bbox = null) {
-    const response = await getLands(bbox);
+  async function loadLands() {
+    const response = await getLands();
     lands.value = response.data;
   }
 

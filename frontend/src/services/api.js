@@ -28,17 +28,9 @@ async function request(url, options = {}) {
 }
 
 // 获取公共服务设施api
-export async function getPoints(bbox = null) {
-  let url = '/points';  // 默认的API路径，与app.js中app.use('/api/points', pointsRoutes);保持一致
-
-  // 如果提供了边界框,就添加到URL参数中
-  if (bbox && bbox.length === 4) {
-    const [minLng, minLat, maxLng, maxLat] = bbox;
-    // 构建查询参数：bbox=minLng,minLat,maxLng,maxLat
-    url += `?bbox=${minLng},${minLat},${maxLng},${maxLat}`;
-  }
-
-  return request(url);
+export async function getPoints() {
+  // 默认的API路径，与app.js中app.use('/api/points', pointsRoutes)保持一致
+  return request('/points')
 }
 
 // 创建公共设施
@@ -66,13 +58,8 @@ export async function deletePoints(id) {
 
 
 // 获取土地利用api
-export async function getLands(bbox = null) {
-  let url = '/lands';
-  if (bbox && bbox.length === 4) {
-    const [minLng, minLat, maxLng, maxLat] = bbox;
-    url += `?bbox=${minLng},${minLat},${maxLng},${maxLat}`;
-  }
-  return request(url);
+export async function getLands() {
+  return request('/lands')
 }
 
 // 创建土地利用数据

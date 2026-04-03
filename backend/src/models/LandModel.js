@@ -4,7 +4,7 @@ const { pool } = require('../config/database');
 // 定义数据模型层
 class landModel {
   // 获取土地利用数据
-  static async getAllLands(bbox = null) {
+  static async getAllLands() {
     let sql = `
       SELECT
         id,
@@ -16,16 +16,7 @@ class landModel {
       FROM lands
     `;
 
-    const params = [];
-
-    // 根据视图框添加空间过滤条件
-    if (bbox && bbox.length === 4) {
-      // 创建视图框
-      sql += ` WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)`;
-      params.push(...bbox);  // 展开bbox数组到参数中
-    }
-
-    const result = await pool.query(sql, params);  // query查询需提供sql语法和params参数
+    const result = await pool.query(sql);  // query查询需提供sql语法
 
     // 处理查询结果：将GeoJSON字符串解析为JavaScript对象
     return result.rows.map(row => ({  // 这里的小括号相当于调用函数，得到参数

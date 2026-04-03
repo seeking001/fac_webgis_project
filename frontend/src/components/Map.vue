@@ -240,7 +240,6 @@ import proj4 from 'proj4'
 
 // 内部模块
 import { useVectorStore } from '../stores/vectorStore'
-import { getMapBbox } from '../utils/mapUtil'
 import { createPoints, updatePoints, deletePoints, createLands, updateLands, deleteLands } from '../services/api'
 
 // ==================== 常量定义 ====================
@@ -454,9 +453,8 @@ function getThumbColor(id) { return { vector: '#4CAF50', satellite: '#795548', '
 async function toggleLayer(layerKey) {
   const layerObj = layers.value[layerKey]
   if (layerObj.visible && !layerObj.loaded) {
-    const bbox = getMapBbox(map)
-    if (layerKey === 'points') await vectorStore.loadPoints(bbox)
-    else await vectorStore.loadLands(bbox)
+    if (layerKey === 'points') await vectorStore.loadPoints()
+    else await vectorStore.loadLands()
     layerObj.loaded = true
     updateVectorLayer(layerKey)
   } else if (layerObj.layer) {
@@ -929,8 +927,7 @@ async function savePointToDatabase() {
       if (response.success) {
         const layerObj = layers.value[layerType]
         if (layerObj.loaded) {
-          const bbox = getMapBbox(map)
-          await vectorStore.loadPoints(bbox)
+          await vectorStore.loadPoints()
           updateVectorLayer(layerType)
         }
         showPointForm.value = false
@@ -1016,8 +1013,7 @@ async function saveLandsToDatabase() {
       if (response?.success) {
         const layerObj = layers.value[layerType]
         if (layerObj?.loaded) {
-          const bbox = getMapBbox(map)
-          await vectorStore.loadLands(bbox)
+          await vectorStore.loadLands()
           updateVectorLayer(layerType)
         }
         showLandsForm.value = false

@@ -1,21 +1,12 @@
 // 引入数据模型
-const PointModel = require('../models/PointModel');
+const PointModel = require('../models/PointModel')
 
 class PointController {
   static async getPoints(req, res) {
     // 从请求查询参数中获取边界框参数
     try {
-      const { bbox } = req.query;
-      let bboxArray = null;
-
-      // 解析边界框参数
-      if (bbox) {
-        // 将字符串转换为数组，使用trim()方法去除空格
-        bboxArray = bbox.split(',').map(coord => parseFloat(coord.trim()));
-      }
-
       // 调用数据模型层获取设施数据
-      const points = await PointModel.getAllPoints(bboxArray);
+      const points = await PointModel.getAllPoints()
 
       // 返回标准化的成功响应
       res.json({

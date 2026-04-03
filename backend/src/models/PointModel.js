@@ -4,7 +4,7 @@ const { pool } = require('../config/database');
 // 定义数据模型层
 class PointModel {
   // 获取公共服务设施
-  static async getAllPoints(bbox = null) {
+  static async getAllPoints() {
     let query = `
       SELECT
         id,
@@ -18,16 +18,7 @@ class PointModel {
       FROM points
     `;
 
-    const params = [];
-
-    // 如果提供了边界框,添加空间过滤条件
-    if (bbox && bbox.length === 4) {
-      // 创建矩形边界框
-      query += ` WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)`;
-      params.push(...bbox); // 展开bbox数组到参数中
-    }
-
-    const result = await pool.query(query, params);
+    const result = await pool.query(query);
 
     // 处理查询结果: 将GeoJSON字符串解析为JavaScript对象
     return result.rows.map(row => ({
