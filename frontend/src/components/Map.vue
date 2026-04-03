@@ -249,11 +249,28 @@ const TIANDITU_API_KEY = import.meta.env.VITE_TIANDITU_API_KEY
 
 // 设施点图标样式
 const POINT_STYLES = {
-  行政办公场所: '🏛️', 社区管理机构: '🏢',
-  大型文化设施: '🏫', 大型体育设施: '🏟️', 社区文化设施: '🎨', 社区体育设施: '🏀',
-  医院: '🏥', 门诊部: '💊', 社区健康服务中心: '❤️',
-  幼儿园: '🌈', 小学: '✏️', 初中: '📙', 九年一贯制学校: '📘', 高中: '📚', 高等教育: '🎓', 职业教育: '💻',
-  养老院: '🏠', 儿童福利院: '🛝', 残疾人服务中心: '♿', 社区老年人日间照料中心: '🍵', 社区托儿机构: '🍼', 社区救助站: '🤝',
+  行政办公场所: '🏛️',
+  社区管理机构: '🏢',
+  大型文化设施: '🏫',
+  大型体育设施: '🏟️',
+  社区文化设施: '🎨',
+  社区体育设施: '🏀',
+  医院: '🏥',
+  门诊部: '💊',
+  社区健康服务中心: '❤️',
+  幼儿园: '🌈',
+  小学: '✏️',
+  初中: '📙',
+  九年一贯制学校: '📘',
+  高中: '📚',
+  高等教育: '🎓',
+  职业教育: '💻',
+  养老院: '🏠',
+  儿童福利院: '🛝',
+  残疾人服务中心: '♿',
+  社区老年人日间照料中心: '🍵',
+  社区托儿机构: '🍼',
+  社区救助站: '🤝',
   其它设施: '📍'
 }
 
@@ -356,6 +373,7 @@ let drawInteraction = null
 let drawLayer = null
 let pointModify = null
 let landsModify = null
+let currentHighlightFeature = null  // 记录当前高亮的要素
 
 const vectorStore = useVectorStore()
 
@@ -503,6 +521,45 @@ function createPointsStyle(feature) {
 function createLandsStyle(feature) {
   const color = LAND_STYLES[feature.get('type')] || 'rgba(0, 0, 0, 0.6)'
   return new Style({ fill: new Fill({ color }), stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.2)', width: 1.5 }) })
+}
+
+// 高亮样式函数
+function createHighlightStyle(feature) {
+  const layerType = feature.get('layerType')
+  
+  if (layerType === 'points') {
+    // 点要素高亮：放大图标并添加光晕效果
+    const icon = POINT_STYLES[feature.get('type')] || '📍'
+    const name = feature.get('name') || ''
+    return [
+      new Style({
+        text: new Text({
+          text: icon,
+          font: 'bold 24px Arial',  // 放大图标
+          stroke: new Stroke({ color: 'white', width: 2 })
+        })
+      }),
+      new Style({
+        text: new Text({
+          text: name,
+          font: '16px Arial',
+          textAlign: 'left',
+          offsetX: 14,
+          textBaseline: 'middle',
+          stroke: new Stroke({ color: '#fff', width: 2 })
+        })
+      })
+    ]
+  } else {
+    // 面要素高亮：添加黄色边框和半透明填充
+    const type = feature.get('type')
+    const color = LAND_STYLES[type] || 'rgba(0, 0, 0, 0.6)'
+    return new Style({
+      fill: new Fill({ color }),
+      stroke: new Stroke({ color: 'yellow', width: 2 }),
+      zIndex:4
+    })
+  }
 }
 
 // ==================== 绘制功能 ====================
@@ -890,6 +947,12 @@ function setupLandsModify(source) {
 }
 
 function exitEditMode() {
+  // 清除高亮
+  if (currentHighlightFeature) {
+    currentHighlightFeature.setStyle(null)
+    currentHighlightFeature = null
+  }
+
   if (originalGeometry.value && selectedFeature.value) {
     const layerObj = layers.value[selectedFeature.value.layerType]
     const source = layerObj.layer.getSource()
@@ -1119,12 +1182,28 @@ function setupMapInteractions() {
     if (showLandsForm.value || isDrawing.value || showPointForm.value || isEditing.value) return
     const features = map.getFeaturesAtPixel(event.pixel)
     if (features.length > 0) {
-      const properties = features[0].getProperties()
+      const feature = features[0]
+      const properties = feature.getProperties()
+
+      // 高亮处理：移除之前的高亮
+      if (currentHighlightFeature) {
+        currentHighlightFeature.setStyle(null)  // 恢复默认样式
+      }
+
+      // 设置当前要素的高亮样式
+      feature.setStyle(createHighlightStyle(feature))
+      currentHighlightFeature = feature
+
       if (isEditing.value && selectedFeature.value?.id === properties.id) return
       if (isEditing.value) exitEditMode()
       selectedFeature.value = properties
       popupPosition.value = { x: event.pixel[0] + 20, y: event.pixel[1] }
     } else {
+      // 点击空白区域，清除高亮
+      if (currentHighlightFeature) {
+        currentHighlightFeature.setStyle(null)
+        currentHighlightFeature = null
+      }
       closePopup()
     }
   })
@@ -1135,6 +1214,12 @@ function setupMapInteractions() {
 }
 
 function closePopup() {
+  // 清除高亮
+  if (currentHighlightFeature) {
+    currentHighlightFeature.setStyle(null)
+    currentHighlightFeature = null
+  }
+
   if (isEditing.value) { exitEditMode(); return }
   selectedFeature.value = null
   popupPosition.value = null
