@@ -56,7 +56,6 @@ export async function deletePoints(id) {
   });
 }
 
-
 // 获取土地利用api
 export async function getLands() {
   return request('/lands')

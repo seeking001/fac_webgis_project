@@ -1540,13 +1540,14 @@ onUnmounted(() => {
 .hint-content {
   padding: 3px;
   font-size: 14px;
+  line-height: 1.8;
   color: #52c41a;
 }
 
 .hint-content kbd {
   padding: 3px;
   font-size: 14px;
-  color: #ffd966;
+  color: #e8ff66;
 }
 
 /* 要素弹窗样式 */
