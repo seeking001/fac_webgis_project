@@ -95,6 +95,7 @@
           <button @click="toggleEditMode(selectedFeature)" class="edit-btn" :class="{ 'active': isEditing }">
             {{ isEditing ? '编辑属性' : '编辑图形' }}
           </button>
+          <button @click="exportSingleFeature(selectedFeature)" class="export-btn">导出数据</button>
           <button v-if="selectedFeature" @click="deleteFeature(selectedFeature.id)" class="delete-btn">
             删除{{ selectedFeature.layerType === 'points' ? '设施' : '用地' }}
           </button>
@@ -239,7 +240,6 @@ import proj4 from 'proj4'
 
 // 内部模块
 import { useVectorStore } from '../stores/vectorStore'
-import { getMapBbox } from '../utils/mapUtil'
 import { createPoints, updatePoints, deletePoints, createLands, updateLands, deleteLands } from '../services/api'
 
 // ==================== 常量定义 ====================
@@ -249,11 +249,28 @@ const TIANDITU_API_KEY = import.meta.env.VITE_TIANDITU_API_KEY
 
 // 设施点图标样式
 const POINT_STYLES = {
-  行政办公场所: '🏛️', 社区管理机构: '🏢',
-  大型文化设施: '🏫', 大型体育设施: '🏟️', 社区文化设施: '🎨', 社区体育设施: '🏀',
-  医院: '🏥', 门诊部: '💊', 社区健康服务中心: '❤️',
-  幼儿园: '🌈', 小学: '✏️', 初中: '📙', 九年一贯制学校: '📘', 高中: '📚', 高等教育: '🎓', 职业教育: '💻',
-  养老院: '🏠', 儿童福利院: '🛝', 残疾人服务中心: '♿', 社区老年人日间照料中心: '🍵', 社区托儿机构: '🍼', 社区救助站: '🤝',
+  行政办公场所: '🏛️',
+  社区管理机构: '🏢',
+  大型文化设施: '🏫',
+  大型体育设施: '🏟️',
+  社区文化设施: '🎨',
+  社区体育设施: '🏀',
+  医院: '🏥',
+  门诊部: '💊',
+  社区健康服务中心: '❤️',
+  幼儿园: '🌈',
+  小学: '✏️',
+  初中: '📙',
+  九年一贯制学校: '📘',
+  高中: '📚',
+  高等教育: '🎓',
+  职业教育: '💻',
+  养老院: '🏠',
+  儿童福利院: '🛝',
+  残疾人服务中心: '♿',
+  社区老年人日间照料中心: '🍵',
+  社区托儿机构: '🍼',
+  社区救助站: '🤝',
   其它设施: '📍'
 }
 
@@ -302,9 +319,9 @@ const basemaps = ref([
 // 矢量图层配置
 const layers = ref({
   points: {
-    name: '设施点', visible: false, loaded: false, layer: null, selectedType: 'all',
+    name: '设施点', visible: false, loaded: false, layer: null, selectedType: '全部类型',
     types: [
-      { label: '全部类型', value: 'all' },
+      { label: '全部类型', value: '全部类型' },
       { label: '行政办公场所', value: '行政办公场所' }, { label: '社区管理机构', value: '社区管理机构' },
       { label: '大型文化设施', value: '大型文化设施' }, { label: '大型体育设施', value: '大型体育设施' },
       { label: '社区文化设施', value: '社区文化设施' }, { label: '社区体育设施', value: '社区体育设施' },
@@ -317,9 +334,9 @@ const layers = ref({
     ]
   },
   lands: {
-    name: '设施用地', visible: false, loaded: false, layer: null, selectedType: 'all',
+    name: '设施用地', visible: false, loaded: false, layer: null, selectedType: '全部类型',
     types: [
-      { label: '全部类型', value: 'all' },
+      { label: '全部类型', value: '全部类型' },
       { label: '商业用地', value: '商业用地' }, { label: '居住用地', value: '居住用地' }, { label: '工业用地', value: '工业用地' },
       { label: '公园绿地', value: '公园绿地' }, { label: '行政管理用地', value: '行政管理用地' }, { label: '文体设施用地', value: '文体设施用地' },
       { label: '医疗卫生用地', value: '医疗卫生用地' }, { label: '教育设施用地', value: '教育设施用地' }, { label: '社会福利用地', value: '社会福利用地' }
@@ -356,6 +373,7 @@ let drawInteraction = null
 let drawLayer = null
 let pointModify = null
 let landsModify = null
+let currentHighlightFeature = null  // 记录当前高亮的要素
 
 const vectorStore = useVectorStore()
 
@@ -453,9 +471,8 @@ function getThumbColor(id) { return { vector: '#4CAF50', satellite: '#795548', '
 async function toggleLayer(layerKey) {
   const layerObj = layers.value[layerKey]
   if (layerObj.visible && !layerObj.loaded) {
-    const bbox = getMapBbox(map)
-    if (layerKey === 'points') await vectorStore.loadPoints(bbox)
-    else await vectorStore.loadLands(bbox)
+    if (layerKey === 'points') await vectorStore.loadPoints()
+    else await vectorStore.loadLands()
     layerObj.loaded = true
     updateVectorLayer(layerKey)
   } else if (layerObj.layer) {
@@ -472,7 +489,7 @@ function updateVectorLayer(layerKey) {
   const storeData = layerKey === 'points' ? vectorStore.points : vectorStore.lands
   const isPoint = layerKey === 'points'
   
-  const filteredData = layerObj.selectedType === 'all' ? storeData : storeData.filter(item => item.type === layerObj.selectedType)
+  const filteredData = layerObj.selectedType === '全部类型' ? storeData : storeData.filter(item => item.type === layerObj.selectedType)
   const source = new VectorSource()
   
   filteredData.forEach(item => {
@@ -504,6 +521,45 @@ function createPointsStyle(feature) {
 function createLandsStyle(feature) {
   const color = LAND_STYLES[feature.get('type')] || 'rgba(0, 0, 0, 0.6)'
   return new Style({ fill: new Fill({ color }), stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.2)', width: 1.5 }) })
+}
+
+// 高亮样式函数
+function createHighlightStyle(feature) {
+  const layerType = feature.get('layerType')
+  
+  if (layerType === 'points') {
+    // 点要素高亮：放大图标并添加光晕效果
+    const icon = POINT_STYLES[feature.get('type')] || '📍'
+    const name = feature.get('name') || ''
+    return [
+      new Style({
+        text: new Text({
+          text: icon,
+          font: 'bold 24px Arial',  // 放大图标
+          stroke: new Stroke({ color: 'white', width: 2 })
+        })
+      }),
+      new Style({
+        text: new Text({
+          text: name,
+          font: '16px Arial',
+          textAlign: 'left',
+          offsetX: 14,
+          textBaseline: 'middle',
+          stroke: new Stroke({ color: '#fff', width: 2 })
+        })
+      })
+    ]
+  } else {
+    // 面要素高亮：添加黄色边框和半透明填充
+    const type = feature.get('type')
+    const color = LAND_STYLES[type] || 'rgba(0, 0, 0, 0.6)'
+    return new Style({
+      fill: new Fill({ color }),
+      stroke: new Stroke({ color: 'yellow', width: 2 }),
+      zIndex:4
+    })
+  }
 }
 
 // ==================== 绘制功能 ====================
@@ -723,6 +779,121 @@ async function handleExport(layerType) {
   cancelBtn.onclick = close
 }
 
+// 单个要素导出函数
+async function exportSingleFeature(feature) {
+  // 创建坐标系选择对话框
+  const mask = document.createElement('div')
+  mask.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9998;'
+  
+  const select = document.createElement('select')
+  select.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;padding:10px;background:white;border:2px solid #409eff;border-radius:5px;width:300px;'
+  select.innerHTML = '<option value="" disabled selected hidden>请选择坐标系</option><option value="EPSG:4547">CGCS2000_3度带_114E</option><option value="EPSG:4326">WGS84_经纬度</option>'
+  
+  const btnGroup = document.createElement('div')
+  btnGroup.style.cssText = 'position:fixed;top:calc(50% + 50px);left:50%;transform:translateX(-50%);z-index:9999;display:flex;gap:10px;'
+  const confirmBtn = document.createElement('button')
+  confirmBtn.textContent = '确定'
+  confirmBtn.style.cssText = 'padding:5px 15px;background:#409eff;color:white;border:none;border-radius:3px;cursor:pointer;'
+  const cancelBtn = document.createElement('button')
+  cancelBtn.textContent = '取消'
+  cancelBtn.style.cssText = 'padding:5px 15px;background:#ccc;color:#333;border:none;border-radius:3px;cursor:pointer;'
+  btnGroup.appendChild(confirmBtn)
+  btnGroup.appendChild(cancelBtn)
+  
+  document.body.appendChild(mask)
+  document.body.appendChild(select)
+  document.body.appendChild(btnGroup)
+  
+  const close = () => {
+    document.body.removeChild(mask)
+    document.body.removeChild(select)
+    document.body.removeChild(btnGroup)
+  }
+  
+  confirmBtn.onclick = () => {
+    const targetEPSG = select.value
+    if (!targetEPSG) {
+      alert('请选择坐标系')
+      return
+    }
+    close()
+    
+    const layerType = feature.layerType
+    const geomType = layerType === 'points' ? 'Point' : 'Polygon'
+    
+    // 获取几何坐标（从地图要素中获取，确保坐标正确）
+    const source = layers.value[layerType]?.layer?.getSource()
+    const mapFeature = source?.getFeatures().find(f => f.get('id') === feature.id)
+    
+    if (!mapFeature) {
+      alert('未找到要素数据')
+      return
+    }
+    
+    const geometry = mapFeature.getGeometry()
+    let coordinates
+    
+    // 获取原始坐标（3857），然后转换为4326
+    if (geomType === 'Point') {
+      const coords3857 = geometry.getCoordinates()
+      coordinates = toLonLat(coords3857)
+    } else {
+      const coords3857 = geometry.getCoordinates()
+      coordinates = coords3857.map(ring =>
+        ring.map(coord => toLonLat(coord))
+      )
+    }
+    
+    // 如果需要转换到4547
+    if (targetEPSG === 'EPSG:4547') {
+      if (geomType === 'Point') {
+        coordinates = proj4('EPSG:4326', 'EPSG:4547', coordinates)
+      } else {
+        coordinates = coordinates.map(ring =>
+          ring.map(coord => proj4('EPSG:4326', 'EPSG:4547', coord))
+        )
+      }
+    }
+    
+    // 构建属性
+    const properties = {
+      name: feature.name,
+      type: feature.type
+    }
+    if (layerType === 'points') {
+      properties.level = feature.level
+      properties.floor_area = feature.floor_area
+      properties.scale = feature.scale
+    } else {
+      properties.site_area = feature.site_area
+    }
+    
+    // 构建 GeoJSON
+    const geojson = {
+      type: 'FeatureCollection',
+      crs: { type: 'name', properties: { name: targetEPSG } },
+      features: [{
+        type: 'Feature',
+        geometry: { type: geomType, coordinates },
+        properties: properties
+      }]
+    }
+    
+    // 下载文件
+    const dataStr = JSON.stringify(geojson, null, 2)
+    const blob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const timestamp = new Date().toISOString().slice(0,19).replace(/:/g, '-')
+    a.download = `${layerType === 'points' ? '设施点' : '设施用地'}_${feature.name || '要素'}_${timestamp}.geojson`
+    a.href = url
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  
+  cancelBtn.onclick = close
+}
+
 // ==================== 编辑功能 ====================
 function toggleEditMode(feature) {
   if (!feature) return
@@ -776,6 +947,12 @@ function setupLandsModify(source) {
 }
 
 function exitEditMode() {
+  // 清除高亮
+  if (currentHighlightFeature) {
+    currentHighlightFeature.setStyle(null)
+    currentHighlightFeature = null
+  }
+
   if (originalGeometry.value && selectedFeature.value) {
     const layerObj = layers.value[selectedFeature.value.layerType]
     const source = layerObj.layer.getSource()
@@ -813,8 +990,7 @@ async function savePointToDatabase() {
       if (response.success) {
         const layerObj = layers.value[layerType]
         if (layerObj.loaded) {
-          const bbox = getMapBbox(map)
-          await vectorStore.loadPoints(bbox)
+          await vectorStore.loadPoints()
           updateVectorLayer(layerType)
         }
         showPointForm.value = false
@@ -900,8 +1076,7 @@ async function saveLandsToDatabase() {
       if (response?.success) {
         const layerObj = layers.value[layerType]
         if (layerObj?.loaded) {
-          const bbox = getMapBbox(map)
-          await vectorStore.loadLands(bbox)
+          await vectorStore.loadLands()
           updateVectorLayer(layerType)
         }
         showLandsForm.value = false
@@ -1007,12 +1182,28 @@ function setupMapInteractions() {
     if (showLandsForm.value || isDrawing.value || showPointForm.value || isEditing.value) return
     const features = map.getFeaturesAtPixel(event.pixel)
     if (features.length > 0) {
-      const properties = features[0].getProperties()
+      const feature = features[0]
+      const properties = feature.getProperties()
+
+      // 高亮处理：移除之前的高亮
+      if (currentHighlightFeature) {
+        currentHighlightFeature.setStyle(null)  // 恢复默认样式
+      }
+
+      // 设置当前要素的高亮样式
+      feature.setStyle(createHighlightStyle(feature))
+      currentHighlightFeature = feature
+
       if (isEditing.value && selectedFeature.value?.id === properties.id) return
       if (isEditing.value) exitEditMode()
       selectedFeature.value = properties
       popupPosition.value = { x: event.pixel[0] + 20, y: event.pixel[1] }
     } else {
+      // 点击空白区域，清除高亮
+      if (currentHighlightFeature) {
+        currentHighlightFeature.setStyle(null)
+        currentHighlightFeature = null
+      }
       closePopup()
     }
   })
@@ -1023,6 +1214,12 @@ function setupMapInteractions() {
 }
 
 function closePopup() {
+  // 清除高亮
+  if (currentHighlightFeature) {
+    currentHighlightFeature.setStyle(null)
+    currentHighlightFeature = null
+  }
+
   if (isEditing.value) { exitEditMode(); return }
   selectedFeature.value = null
   popupPosition.value = null
@@ -1261,6 +1458,7 @@ onUnmounted(() => {
 }
 .control-group select {
   padding: 3px 5px;
+  width: 190px;
   font-size: 14px;
   border-radius: 5px;
   border: none;
@@ -1419,6 +1617,20 @@ onUnmounted(() => {
 
 .edit-btn.active {
   background: rgba(150, 0, 100, 0.8);
+}
+
+.export-btn {
+  margin-top: 5px;
+  padding: 2px 6px;
+  background: rgba(50, 0, 100, 0.5);
+  font-size: 12px;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.export-btn:hover {
+  background: rgb(50, 0, 100);
 }
 
 .delete-btn {
