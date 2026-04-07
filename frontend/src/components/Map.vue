@@ -468,7 +468,7 @@ function initMap() {
 }
 
 // ==================== 底图操作 ====================
-function switchBasemap(basemapId) {
+async function switchBasemap(basemapId) {
   if (!map || activeBasemapId.value === basemapId) return
   
   // 三维地图特殊处理
@@ -477,14 +477,12 @@ function switchBasemap(basemapId) {
     map.getTargetElement().style.display = 'none'
     // 显示 3D 容器
     if (cesiumContainer.value) cesiumContainer.value.style.display = 'block'
+    
     // 加载 Cesium
-    loadCesium()
+    if (!cesiumInitialized) await loadCesium()
     activeBasemapId.value = basemapId
     return
   }
-  
-  // 原有的 2D 底图切换逻辑（保持不变）
-  if (basemapId === '3d') return // 已处理
   
   const oldLayers = map.getLayers().getArray().filter(layer => layer instanceof TileLayer)
   oldLayers.forEach(layer => map.removeLayer(layer))
@@ -495,15 +493,15 @@ function switchBasemap(basemapId) {
     if (newBasemap.roadNetLayer) map.addLayer(newBasemap.roadNetLayer)
   }
   
-  activeBasemapId.value = basemapId
-  
   // 如果从 3D 切换回 2D，恢复地图容器显示
-  if (map.getTargetElement().style.display === 'none') {
+  if (map.getTargetElement()) {
     map.getTargetElement().style.display = 'block'
   }
   if (cesiumContainer.value) {
     cesiumContainer.value.style.display = 'none'
   }
+
+  activeBasemapId.value = basemapId
 }
 
 function toggleRoadNet(basemap) { basemap.roadNetLayer?.setVisible(basemap.roadNetVisible) }
@@ -1541,10 +1539,9 @@ onUnmounted(() => {
 .cesium-container {
   position: absolute;
   top: 0;
+  bottom: 0;
   left: 0;
-  width: 100vw;
-  height: 100wh;
-  z-index: 1;
+  right: 0;
 }
 
 /* 地图控件样式 */
