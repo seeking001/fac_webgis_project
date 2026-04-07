@@ -16,7 +16,9 @@
     "pinia": "^3.0.4",
     "proj4": "^2.20.4",
     "vue": "^3.5.22",
-    "vue-router": "^4.6.3"
+    "vue-router": "^4.6.3",
+    "cesium": "^1.120.0",
+    "vite-plugin-cesium": "^1.2.22"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",

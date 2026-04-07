@@ -7,6 +7,7 @@ require('dotenv').config();  // 加载环境变量
 const { testConnection } = require('./config/database');
 const pointRoutes = require('./routes/pointRouter');
 const landRoutes = require('./routes/landRouter');
+const buildingRoutes = require('./routes/buildingRouter');
 
 // 创建express应用实例
 const app = express();
@@ -26,6 +27,8 @@ app.use(express.json());
 app.use('/api/points', pointRoutes);
 // 土地利用路由
 app.use('/api/lands', landRoutes);
+// 建筑路由
+app.use('/api/buildings', buildingRoutes);
 
 // 创建服务器启动函数
 const startServer = async () => {

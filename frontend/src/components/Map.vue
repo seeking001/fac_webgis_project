@@ -2,6 +2,7 @@
   <div class="map-wrapper">
     <!-- 地图容器 -->
     <div ref="mapContainer" class="map-container"></div>
+    <div ref="cesiumContainer" class="cesium-container" v-show="activeBasemapId === '3d'"></div>
 
     <!-- 底图切换控件 -->
     <div class="basemap-switcher" @mouseenter="basemapPanelVisible = true" @mouseleave="basemapPanelVisible = false">
@@ -287,6 +288,15 @@ const LAND_STYLES = {
   '社会福利用地': 'rgba(254, 24, 201, 0.6)'
 }
 
+// 建筑类型颜色样式
+const buildingColors = {
+  '配套': 'rgba(254, 24, 201, 0.6)',     // GIC用地色
+  '商业': 'rgba(255, 0, 0, 0.6)',        // 商业用地色
+  '住宅': 'rgba(255, 255, 45, 0.6)',     // 居住用地色
+  '工业': 'rgba(187, 150, 116, 0.6)',    // 工业用地色
+};
+const defaultBuildingColor = 'rgba(200, 200, 200, 0.7)';
+
 // 底图配置
 const basemaps = ref([
   {
@@ -346,7 +356,13 @@ const layers = ref({
 
 // ==================== 响应式状态 ====================
 const mapContainer = ref(null)
+const cesiumContainer = ref(null)  // Cesium 地图容器
 let map = null
+let viewer = null;          // Cesium Viewer 实例
+let cesiumInitialized = false;
+let buildingDataSource = null;
+let pointEntities = [];
+let landEntities = [];
 
 const activeBasemapId = ref('vector')
 const basemapPanelVisible = ref(false)
@@ -374,6 +390,7 @@ let drawLayer = null
 let pointModify = null
 let landsModify = null
 let currentHighlightFeature = null  // 记录当前高亮的要素
+let Cesium = null    // 保存 Cesium 模块引用
 
 const vectorStore = useVectorStore()
 
@@ -453,19 +470,251 @@ function initMap() {
 // ==================== 底图操作 ====================
 function switchBasemap(basemapId) {
   if (!map || activeBasemapId.value === basemapId) return
-  if (basemapId === '3d') { alert('三维地图功能正在开发中…'); return }
+  
+  // 三维地图特殊处理
+  if (basemapId === '3d') {
+    // 隐藏 2D 地图容器
+    map.getTargetElement().style.display = 'none'
+    // 显示 3D 容器
+    if (cesiumContainer.value) cesiumContainer.value.style.display = 'block'
+    // 加载 Cesium
+    loadCesium()
+    activeBasemapId.value = basemapId
+    return
+  }
+  
+  // 原有的 2D 底图切换逻辑（保持不变）
+  if (basemapId === '3d') return // 已处理
   
   const oldLayers = map.getLayers().getArray().filter(layer => layer instanceof TileLayer)
   oldLayers.forEach(layer => map.removeLayer(layer))
   
   const newBasemap = basemaps.value.find(b => b.id === basemapId)
-  map.addLayer(newBasemap.layer)
-  map.addLayer(newBasemap.roadNetLayer)
+  if (newBasemap && newBasemap.layer) {
+    map.addLayer(newBasemap.layer)
+    if (newBasemap.roadNetLayer) map.addLayer(newBasemap.roadNetLayer)
+  }
+  
   activeBasemapId.value = basemapId
+  
+  // 如果从 3D 切换回 2D，恢复地图容器显示
+  if (map.getTargetElement().style.display === 'none') {
+    map.getTargetElement().style.display = 'block'
+  }
+  if (cesiumContainer.value) {
+    cesiumContainer.value.style.display = 'none'
+  }
 }
 
 function toggleRoadNet(basemap) { basemap.roadNetLayer?.setVisible(basemap.roadNetVisible) }
 function getThumbColor(id) { return { vector: '#4CAF50', satellite: '#795548', '3d': '#2196F3' }[id] || '#ccc' }
+
+// 动态加载 Cesium 的函数
+async function loadCesium() {
+  if (cesiumInitialized) return
+
+  // 设置 Cesium 基础路径
+  window.CESIUM_BASE_URL = '/cesium'
+  
+  // 动态导入 Cesium 核心库和样式
+  Cesium = await import('cesium')
+  await import('cesium/Build/Cesium/Widgets/widgets.css')
+  
+  // 初始化 Viewer
+  viewer = new Cesium.Viewer(cesiumContainer.value, {
+    geocoder: false,              // 查找位置工具
+    homeButton: false,            // 返回初始位置
+    sceneModePicker: false,       // 选择视角模式
+    baseLayerPicker: false,       // 图层选择器
+    navigationHelpButton: false,  // 导航帮助按钮
+    fullscreenButton: false,      // 全屏按钮
+    animation: false,             // 动画器件
+    timeline: false,              // 时间线
+    infoBox: false,               // 实体信息
+  })
+  
+  // 移除 Cesium 默认的logo
+  viewer.cesiumWidget.creditContainer.style.display = 'none'
+
+  // 移除原生默认地图
+  viewer.imageryLayers.removeAll()
+
+  if (TIANDITU_API_KEY) {
+    // 天地图卫星地图
+    viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
+      url: `https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
+      subdomains: ['0', '1', '2', '3', '4', '5', '6', '7']
+    }))
+
+    // 天地图卫星地图注记
+    viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
+      url: `https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
+      subdomains: ['0', '1', '2', '3', '4', '5', '6', '7']
+    }))
+  }
+  
+  // 设置初始相机位置
+  viewer.camera.setView({
+    destination: Cesium.Cartesian3.fromDegrees(114.0265, 22.6042, 5000),
+    orientation: {
+      heading: Cesium.Math.toRadians(0),
+      pitch: Cesium.Math.toRadians(-90),
+      roll: 0
+    }
+  })
+  
+  // 加载建筑数据
+  await loadBuildings()
+  // 加载设施点和用地
+  loadPointsAndLands()
+  // 设置点击事件
+  setupCesiumClickHandler()
+  
+  cesiumInitialized = true
+}
+
+// 加载建筑数据的函数
+async function loadBuildings() {
+  try {
+    const response = await fetch('http://localhost:3000/api/buildings')
+    const result = await response.json()
+    if (!result.success) throw new Error('加载建筑失败')
+    
+    const geojson = result.data
+    
+    buildingDataSource = await Cesium.GeoJsonDataSource.load(geojson, {
+      stroke: Cesium.Color.WHITE,
+      fill: Cesium.Color.fromCssColorString('rgba(200,200,200,0.6)'),
+      extrudedHeight: (properties) => {
+        let height = properties.height
+        if (!height && properties.up_floor) height = properties.up_floor * 3.5
+        return height || 10
+      },
+      closeTop: true,
+      closeBottom: false
+    })
+    
+    // 自定义建筑颜色
+    const entities = buildingDataSource.entities.values
+    for (let i = 0; i < entities.length; i++) {
+      const entity = entities[i]
+      const type = entity.properties?.type?.getValue()
+      const color = buildingColors[type] || defaultBuildingColor
+      entity.polygon.material = Cesium.Color.fromCssColorString(color)
+    }
+    
+    viewer.dataSources.add(buildingDataSource)
+  } catch (error) {
+    console.error('建筑加载失败', error)
+  }
+}
+
+// 加载设施点和用地
+function loadPointsAndLands() {
+  // 清除旧数据
+  pointEntities.forEach(e => viewer.entities.remove(e))
+  landEntities.forEach(e => viewer.entities.remove(e))
+  pointEntities = []
+  landEntities = []
+  
+  // 从 store 获取点数据
+  const points = vectorStore.points
+  points.forEach(point => {
+    const [lng, lat] = point.geometry.coordinates
+    const entity = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(lng, lat),
+      billboard: {
+        image: getPointIcon(point.type),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        scale: 0.8
+      },
+      label: {
+        text: point.name,
+        font: '14px sans-serif',
+        pixelOffset: new Cesium.Cartesian2(0, -30),
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE
+      },
+      properties: point
+    })
+    pointEntities.push(entity)
+  })
+  
+  // 加载用地数据
+  const lands = vectorStore.lands
+  lands.forEach(land => {
+    const coordinates = land.geometry.coordinates[0]
+    const positions = coordinates.map(coord => Cesium.Cartesian3.fromDegrees(coord[0], coord[1]))
+    const entity = viewer.entities.add({
+      polygon: {
+        hierarchy: new Cesium.PolygonHierarchy(positions),
+        material: Cesium.Color.fromCssColorString(LAND_STYLES[land.type] || 'rgba(0,0,0,0.5)'),
+        outline: true,
+        outlineColor: Cesium.Color.BLACK
+      },
+      properties: land
+    })
+    landEntities.push(entity)
+  })
+}
+
+// 获取设施点图标（根据类型返回图标 URL，可使用 emoji 转 canvas 或图片）
+function getPointIcon(type) {
+  // 简单实现：使用 Canvas 生成带文字图标的图片，或使用固定图片
+  // 此处返回一个 emoji 的 Canvas 纹理（演示用）
+  const canvas = document.createElement('canvas');
+  canvas.width = 32;
+  canvas.height = 32;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ff6600';
+  ctx.arc(16, 16, 12, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.fillStyle = 'white';
+  ctx.font = '20px sans-serif';
+  ctx.fillText('📍', 8, 24);
+  return canvas;
+}
+
+// 点击事件：显示建筑/设施信息
+function setupCesiumClickHandler() {
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
+  handler.setInputAction((click) => {
+    const pick = viewer.scene.pick(click.position)
+    if (Cesium.defined(pick) && pick.id) {
+      const entity = pick.id
+      const properties = entity.properties?.getValue() || entity._properties
+      if (properties) {
+        showCesiumPopup(properties, click.position)
+      }
+    } else {
+      closeCesiumPopup()
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+}
+
+// 显示三维弹窗（简单 div）
+let cesiumPopupDiv = null;
+function showCesiumPopup(properties, screenPosition) {
+  if (!cesiumPopupDiv) {
+    cesiumPopupDiv = document.createElement('div');
+    cesiumPopupDiv.className = 'cesium-popup';
+    document.body.appendChild(cesiumPopupDiv);
+  }
+  // 填充内容（类似二维弹窗）
+  let html = `<h4>${properties.name || '建筑'}</h4>`;
+  if (properties.height) html += `<p>高度: ${properties.height}米</p>`;
+  if (properties.type) html += `<p>类型: ${properties.type}</p>`;
+  if (properties.floor_area) html += `<p>建筑面积: ${properties.floor_area}㎡</p>`;
+  // 设置位置
+  cesiumPopupDiv.style.left = `${screenPosition.x + 20}px`;
+  cesiumPopupDiv.style.top = `${screenPosition.y}px`;
+  cesiumPopupDiv.style.display = 'block';
+}
+function closeCesiumPopup() {
+  if (cesiumPopupDiv) cesiumPopupDiv.style.display = 'none';
+}
 
 // ==================== 图层操作 ====================
 async function toggleLayer(layerKey) {
@@ -1254,6 +1503,8 @@ function cancelDraw() {
 onMounted(() => {
   if (!mapContainer.value) return
   initMap()
+  // 初始隐藏三维容器
+  if (cesiumContainer.value) cesiumContainer.value.style.display = 'none'
   
   escHandler = (e) => {
     if (e.key !== 'Escape') return
@@ -1266,6 +1517,10 @@ onMounted(() => {
 onUnmounted(() => {
   if (escHandler) document.removeEventListener('keydown', escHandler)
   if (map) { map.setTarget(null); map = null }
+  if (viewer) {
+    viewer.destroy()
+    viewer = null
+  }
 })
 </script>
 
@@ -1281,6 +1536,15 @@ onUnmounted(() => {
   bottom: 0;
   left: 0;
   right: 0;
+}
+
+.cesium-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100wh;
+  z-index: 1;
 }
 
 /* 地图控件样式 */
@@ -1416,6 +1680,32 @@ onUnmounted(() => {
 }
 .roadnet-toggle input {
   margin-right: 4px;
+}
+
+/* 三维弹窗样式 */
+.cesium-popup {
+  position: absolute;
+  background: rgba(30, 0, 60, 0.9);
+  padding: 8px 15px;
+  border-radius: 5px;
+  color: white;
+  z-index: 1000;
+  pointer-events: none;
+  font-size: 14px;
+  max-width: 250px;
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.cesium-popup h4 {
+  margin: 0 0 5px;
+  border-bottom: 1px solid #aaa;
+  color: #ffd700;
+}
+
+.cesium-popup p {
+  margin: 3px 0;
+  font-size: 12px;
 }
 
 /* 左侧栏样式 */
