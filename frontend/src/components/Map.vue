@@ -457,7 +457,7 @@ function initMap() {
   map = new Map({
     target: mapContainer.value,
     layers: [basemaps.value[0].layer, basemaps.value[0].roadNetLayer],
-    view: new View({ center: fromLonLat([114.04, 22.69]), zoom: 12, projection: 'EPSG:3857' }),
+    view: new View({ center: fromLonLat([114.03, 22.61]), zoom: 14.5, projection: 'EPSG:3857' }),
     controls: defaults().extend([
       new FullScreen(),
       new ScaleLine(),
@@ -479,7 +479,15 @@ async function switchBasemap(basemapId) {
     if (cesiumContainer.value) cesiumContainer.value.style.display = 'block'
     
     // 加载 Cesium
-    if (!cesiumInitialized) await loadCesium()
+    if (!cesiumInitialized) {
+      await loadCesium()
+    } else {
+      setTimeout(() => {
+        if (viewer) viewer.resize()
+        // 重新加载点和面
+        loadPointsAndLands()
+      }, 50)
+    }
     activeBasemapId.value = basemapId
     return
   }
@@ -545,18 +553,18 @@ async function loadCesium() {
     }))
 
     // 天地图卫星地图注记
-    viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
-      url: `https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
-      subdomains: ['0', '1', '2', '3', '4', '5', '6', '7']
-    }))
+    // viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
+    //   url: `https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_API_KEY}`,
+    //   subdomains: ['0', '1', '2', '3', '4', '5', '6', '7']
+    // }))
   }
   
   // 设置初始相机位置
   viewer.camera.setView({
-    destination: Cesium.Cartesian3.fromDegrees(114.0265, 22.6042, 5000),
+    destination: Cesium.Cartesian3.fromDegrees(114.03, 22.56, 3000),
     orientation: {
       heading: Cesium.Math.toRadians(0),
-      pitch: Cesium.Math.toRadians(-90),
+      pitch: Cesium.Math.toRadians(-30),
       roll: 0
     }
   })
@@ -564,12 +572,24 @@ async function loadCesium() {
   // 加载建筑数据
   await loadBuildings()
   // 加载设施点和用地
-  loadPointsAndLands()
+  await loadPointsAndLands()
   // 设置点击事件
   setupCesiumClickHandler()
   
   cesiumInitialized = true
 }
+
+watch(
+  () => [layers.value.points.visible, layers.value.points.selectedType, 
+          layers.value.lands.visible, layers.value.lands.selectedType],
+  () => {
+    if (viewer && cesiumInitialized && activeBasemapId.value === '3d') {
+      // 重新加载点和面（会按当前配置过滤）
+      loadPointsAndLands()
+    }
+  },
+  { deep: true }
+)
 
 // 加载建筑数据的函数
 async function loadBuildings() {
@@ -582,23 +602,29 @@ async function loadBuildings() {
     
     buildingDataSource = await Cesium.GeoJsonDataSource.load(geojson, {
       stroke: Cesium.Color.WHITE,
-      fill: Cesium.Color.fromCssColorString('rgba(200,200,200,0.6)'),
-      extrudedHeight: (properties) => {
-        let height = properties.height
-        if (!height && properties.up_floor) height = properties.up_floor * 3.5
-        return height || 10
-      },
-      closeTop: true,
-      closeBottom: false
+      fill: Cesium.Color.fromCssColorString('rgba(200,200,200,0.6)')
     })
     
     // 自定义建筑颜色
     const entities = buildingDataSource.entities.values
     for (let i = 0; i < entities.length; i++) {
       const entity = entities[i]
+      const properties = entity.properties
+
+      let height = properties?.height?.getValue()
+      if (!height || height === 0) {
+        const upFloor = properties?.up_floor?.getValue()
+        height = upFloor ? upFloor * 3.5 : 10
+      }
+
       const type = entity.properties?.type?.getValue()
       const color = buildingColors[type] || defaultBuildingColor
-      entity.polygon.material = Cesium.Color.fromCssColorString(color)
+      
+      if (entity.polygon) {
+        entity.polygon.material = Cesium.Color.fromCssColorString(color)
+        entity.polygon.extrudedHeight = height
+        entity.polygon.height = 0
+      }
     }
     
     viewer.dataSources.add(buildingDataSource)
@@ -608,71 +634,127 @@ async function loadBuildings() {
 }
 
 // 加载设施点和用地
-function loadPointsAndLands() {
+async function loadPointsAndLands() {
   // 清除旧数据
   pointEntities.forEach(e => viewer.entities.remove(e))
   landEntities.forEach(e => viewer.entities.remove(e))
   pointEntities = []
   landEntities = []
   
-  // 从 store 获取点数据
-  const points = vectorStore.points
-  points.forEach(point => {
-    const [lng, lat] = point.geometry.coordinates
-    const entity = viewer.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(lng, lat),
-      billboard: {
-        image: getPointIcon(point.type),
-        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        scale: 0.8
-      },
-      label: {
-        text: point.name,
-        font: '14px sans-serif',
-        pixelOffset: new Cesium.Cartesian2(0, -30),
-        fillColor: Cesium.Color.WHITE,
-        outlineColor: Cesium.Color.BLACK,
-        outlineWidth: 2,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE
-      },
-      properties: point
-    })
-    pointEntities.push(entity)
-  })
+  // 确保数据已加载
+  if (vectorStore.points.length === 0) {
+    await vectorStore.loadPoints()
+  }
+  if (vectorStore.lands.length === 0) {
+    await vectorStore.loadLands()
+  }
   
-  // 加载用地数据
-  const lands = vectorStore.lands
-  lands.forEach(land => {
-    const coordinates = land.geometry.coordinates[0]
-    const positions = coordinates.map(coord => Cesium.Cartesian3.fromDegrees(coord[0], coord[1]))
-    const entity = viewer.entities.add({
-      polygon: {
-        hierarchy: new Cesium.PolygonHierarchy(positions),
-        material: Cesium.Color.fromCssColorString(LAND_STYLES[land.type] || 'rgba(0,0,0,0.5)'),
-        outline: true,
-        outlineColor: Cesium.Color.BLACK
-      },
-      properties: land
+  // 获取图层配置
+  const pointsConfig = layers.value.points
+  const landsConfig = layers.value.lands
+  
+  // 按配置过滤设施点
+  if (pointsConfig.visible) {
+    let filteredPoints = vectorStore.points
+    if (pointsConfig.selectedType !== '全部类型') {
+      filteredPoints = filteredPoints.filter(p => p.type === pointsConfig.selectedType)
+    }
+    
+    filteredPoints.forEach(point => {
+      const [lng, lat] = point.geometry.coordinates
+      const entity = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lng, lat),
+        billboard: {
+          image: getPointIcon(point.type),
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          scale: 0.8
+        },
+        label: {
+          text: point.name,
+          font: '14px "Microsoft YaHei", Arial, sans-serif',
+          pixelOffset: new Cesium.Cartesian2(10, -2),
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.LEFT
+        },
+        properties: point
+      })
+      pointEntities.push(entity)
     })
-    landEntities.push(entity)
-  })
+  }
+  
+  // 按配置过滤设施用地
+  if (landsConfig.visible) {
+    let filteredLands = vectorStore.lands
+    if (landsConfig.selectedType !== '全部类型') {
+      filteredLands = filteredLands.filter(l => l.type === landsConfig.selectedType)
+    }
+    
+    filteredLands.forEach(land => {
+      const coordinates = land.geometry.coordinates[0]
+      const positions = coordinates.map(coord => Cesium.Cartesian3.fromDegrees(coord[0], coord[1]))
+      const entity = viewer.entities.add({
+        polygon: {
+          hierarchy: new Cesium.PolygonHierarchy(positions),
+          material: Cesium.Color.fromCssColorString(LAND_STYLES[land.type] || 'rgba(0,0,0,0.5)'),
+          outline: true,
+          outlineColor: Cesium.Color.BLACK
+        },
+        properties: land
+      })
+      landEntities.push(entity)
+    })
+  }
 }
 
 // 获取设施点图标（根据类型返回图标 URL，可使用 emoji 转 canvas 或图片）
 function getPointIcon(type) {
-  // 简单实现：使用 Canvas 生成带文字图标的图片，或使用固定图片
-  // 此处返回一个 emoji 的 Canvas 纹理（演示用）
-  const canvas = document.createElement('canvas');
-  canvas.width = 32;
-  canvas.height = 32;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#ff6600';
-  ctx.arc(16, 16, 12, 0, 2 * Math.PI);
-  ctx.fill();
-  ctx.fillStyle = 'white';
-  ctx.font = '20px sans-serif';
-  ctx.fillText('📍', 8, 24);
-  return canvas;
+  // 创建 Canvas 绘制图标
+  const canvas = document.createElement('canvas')
+  canvas.width = 32
+  canvas.height = 32
+  const ctx = canvas.getContext('2d')
+  
+  // 绘制图标符号
+  ctx.fillStyle = 'white'
+  ctx.font = 'bold 18px "Segoe UI Emoji", "Apple Color Emoji", sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  
+  // 根据类型返回不同符号
+  const iconMap = {
+    '行政办公场所': '🏛️',
+    '社区管理机构': '🏢',
+    '大型文化设施': '🏫',
+    '大型体育设施': '🏟️',
+    '社区文化设施': '🎨',
+    '社区体育设施': '🏀',
+    '医院': '🏥',
+    '门诊部': '💊',
+    '社区健康服务中心': '❤️',
+    '幼儿园': '🌈',
+    '小学': '✏️',
+    '初中': '📙',
+    '九年一贯制学校': '📘',
+    '高中': '📚',
+    '高等教育': '🎓',
+    '职业教育': '💻',
+    '养老院': '🏠',
+    '儿童福利院': '🛝',
+    '残疾人服务中心': '♿',
+    '社区老年人日间照料中心': '🍵',
+    '社区托儿机构': '🍼',
+    '社区救助站': '🤝'
+  }
+  
+  const icon = iconMap[type] || '📍'
+  ctx.fillText(icon, 16, 16)
+  
+  return canvas
 }
 
 // 点击事件：显示建筑/设施信息
