@@ -46,6 +46,14 @@
           <button @click="handleExport(key)" :disabled="!config.visible">导出</button>
         </div>
       </div>
+
+      <!-- 三维展示操作框 -->
+      <div class="layer-panel">
+        <h4>三维展示</h4>
+        <div class="control-group">
+          <button @click="startFlythrough" class="fly-btn">漫游飞行</button>
+        </div>
+      </div>
     </div>
 
     <!-- 右侧边栏 -->
@@ -395,6 +403,7 @@ let cesiumPopupDiv = null  // Cesium 弹窗元素
 let cesiumPopupCloseBtn = null  // Cesium 弹窗内容元素
 let lastHighlighted = null
 let updateInterval = null
+let isFlying = false   // 飞行漫游状态
 
 const vectorStore = useVectorStore()
 
@@ -627,7 +636,7 @@ async function loadBuildings() {
       let height = properties?.height?.getValue()
       if (!height || height === 0) {
         const upFloor = properties?.up_floor?.getValue()
-        height = upFloor ? upFloor * 3.5 : 10
+        height = upFloor ? upFloor * 3 : 10
       }
 
       const type = entity.properties?.type?.getValue()
@@ -813,6 +822,70 @@ function setupCesiumClickHandler() {
       closeCesiumPopup()
     }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+}
+
+// 飞行漫游函数
+async function startFlythrough() {
+  if (!viewer || isFlying) return
+  isFlying = true
+  
+  try {
+    // 禁用用户交互
+    viewer.scene.screenSpaceCameraController.enableInputs = false
+
+    // 定义飞行路径
+    const flightPath = [
+      { lng: 114.0310, lat: 22.5900, height: 1200, heading: -21, pitch: -40, duration: 2 },
+      { lng: 114.0305, lat: 22.5940, height: 800, heading: -26, pitch: -30, duration: 2 },
+      { lng: 114.0288, lat: 22.5980, height: 550, heading: -30, pitch: -23, duration: 2 },
+      { lng: 114.0268, lat: 22.6020, height: 400, heading: -33, pitch: -18, duration: 2 },
+      { lng: 114.0240, lat: 22.6060, height: 350, heading: -35, pitch: -15, duration: 2 },
+    ]
+    
+    // 逐个航点飞行
+    for (let i = 0; i < flightPath.length; i++) {
+      const point = flightPath[i]
+      // 使用 Promise 包装 flyTo，确保等待完成
+      await new Promise((resolve) => {
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(point.lng, point.lat, point.height),
+          orientation: {
+            heading: Cesium.Math.toRadians(point.heading),
+            pitch: Cesium.Math.toRadians(point.pitch),
+            roll: 0
+          },
+          duration: point.duration,
+          easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
+          complete: () => {
+            resolve()  // 飞行完成后继续下一个
+          },
+          cancel: () => {
+            resolve()  // 如果被取消，也继续
+          }
+        })
+      })
+    }
+    
+    // 可选：最后飞回整体视图
+    await new Promise((resolve) => {
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(114.03, 22.58, 1800),
+        orientation: {
+          heading: Cesium.Math.toRadians(-10),
+          pitch: Cesium.Math.toRadians(-30),
+          roll: 0
+        },
+        duration: 3,
+        easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
+        complete: resolve
+      })
+    })
+  } catch (error) {
+    console.error('飞行漫游出错', error)
+  } finally {
+    viewer.scene.screenSpaceCameraController.enableInputs = true
+    isFlying = false
+  }
 }
 
 // 显示三维弹窗
