@@ -290,10 +290,10 @@ const LAND_STYLES = {
 
 // 建筑类型颜色样式
 const buildingColors = {
-  '配套': 'rgba(254, 24, 201, 0.6)',     // GIC用地色
-  '商业': 'rgba(255, 0, 0, 0.6)',        // 商业用地色
-  '住宅': 'rgba(255, 255, 45, 0.6)',     // 居住用地色
-  '工业': 'rgba(187, 150, 116, 0.6)',    // 工业用地色
+  '商业': 'rgba(255, 0, 0, 0.8)',        // 商业用地色
+  '居住': 'rgba(255, 255, 45, 0.8)',     // 居住用地色
+  '工业': 'rgba(187, 150, 116, 0.8)',    // 工业用地色
+  '配套': 'rgba(254, 24, 201, 0.8)',     // GIC用地色
 };
 const defaultBuildingColor = 'rgba(200, 200, 200, 0.7)';
 
@@ -393,7 +393,7 @@ let currentHighlightFeature = null  // 记录当前高亮的要素
 let Cesium = null    // 保存 Cesium 模块引用
 let cesiumPopupDiv = null  // Cesium 弹窗元素
 let cesiumPopupCloseBtn = null  // Cesium 弹窗内容元素
-let lastPosition = null
+let lastHighlighted = null
 let updateInterval = null
 
 const vectorStore = useVectorStore()
@@ -542,6 +542,7 @@ async function loadCesium() {
     timeline: false,              // 时间线
     infoBox: false,               // 实体信息
     imageryProvider: false,       // 禁用默认影像提供器
+    selectionIndicator: false,    // 选择指示器
   })
   
   // 移除 Cesium 默认的logo
@@ -769,12 +770,35 @@ function setupCesiumClickHandler() {
   const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
   handler.setInputAction((click) => {
     const pick = viewer.scene.pick(click.position)
+    
+    // 清除之前的高亮
+    if (lastHighlighted) {
+      if (lastHighlighted.polygon) {
+        lastHighlighted.polygon.outlineColor = Cesium.Color.WHITE
+        lastHighlighted.polygon.material = lastHighlighted._originalMaterial
+      }
+      if (lastHighlighted.billboard) lastHighlighted.billboard.scale = 0.8
+    }
+    
     if (Cesium.defined(pick) && pick.id) {
       const entity = pick.id
-      const properties = entity.properties?.getValue() || entity._properties
-      if (properties) {
-        showCesiumPopup(properties, click.position)
+      lastHighlighted = entity
+      
+      // 先高亮（立即触发渲染）
+      if (entity.polygon) {
+        if (!entity._originalMaterial) entity._originalMaterial = entity.polygon.material
+        entity.polygon.material = Cesium.Color.fromCssColorString('rgba(255, 255, 255, 0.3)')
+        entity.polygon.outlineColor = Cesium.Color.BLACK
       }
+      if (entity.billboard) {
+        entity.billboard.scale = 1.2
+      }
+      
+      // 后显示弹窗
+      setTimeout(() => {
+        const properties = entity.properties?.getValue() || entity._properties
+        if (properties) showCesiumPopup(properties, click.position)
+      }, 100)
     } else {
       closeCesiumPopup()
     }
