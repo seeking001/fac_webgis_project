@@ -461,7 +461,7 @@ function initMap() {
   map = new Map({
     target: mapContainer.value,
     layers: [basemaps.value[0].layer, basemaps.value[0].roadNetLayer],
-    view: new View({ center: fromLonLat([114.03, 22.61]), zoom: 14.5, projection: 'EPSG:3857' }),
+    view: new View({ center: fromLonLat([114.03, 22.61]), zoom: 15, projection: 'EPSG:3857' }),
     controls: defaults().extend([
       new FullScreen(),
       new ScaleLine(),
@@ -529,6 +529,12 @@ async function loadCesium() {
   // 动态导入 Cesium 核心库和样式
   Cesium = await import('cesium')
   await import('cesium/Build/Cesium/Widgets/widgets.css')
+
+  // 创建地形
+  const terrainProvider = await Cesium.createWorldTerrainAsync({
+    requestVertexNormals: true,
+    requestWaterMask: true
+  })
   
   // 初始化 Viewer
   viewer = new Cesium.Viewer(cesiumContainer.value, {
@@ -543,6 +549,7 @@ async function loadCesium() {
     infoBox: false,               // 实体信息
     imageryProvider: false,       // 禁用默认影像提供器
     selectionIndicator: false,    // 选择指示器
+    terrainProvider: terrainProvider,  // 使用地形数据
   })
   
   // 移除 Cesium 默认的logo
@@ -567,9 +574,9 @@ async function loadCesium() {
   
   // 设置初始相机位置
   viewer.camera.setView({
-    destination: Cesium.Cartesian3.fromDegrees(114.03, 22.56, 3000),
+    destination: Cesium.Cartesian3.fromDegrees(114.03, 22.58, 1800),
     orientation: {
-      heading: Cesium.Math.toRadians(0),
+      heading: Cesium.Math.toRadians(-10),
       pitch: Cesium.Math.toRadians(-30),
       roll: 0
     }
@@ -630,6 +637,9 @@ async function loadBuildings() {
         entity.polygon.material = Cesium.Color.fromCssColorString(color)
         entity.polygon.extrudedHeight = height
         entity.polygon.height = 0
+        // 解决地形偏移问题
+        entity.polygon.heightReference = Cesium.HeightReference.CLAMP_TO_GROUND
+        entity.polygon.extrudedHeightReference = Cesium.HeightReference.RELATIVE_TO_GROUND
       }
     }
     
