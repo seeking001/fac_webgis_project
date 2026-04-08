@@ -94,7 +94,7 @@
           <p><strong>设施级别：</strong>{{ selectedFeature.level }}</p>
           <p><strong>设施类型：</strong>{{ selectedFeature.type }}</p>
           <p><strong>建筑面积：</strong>{{ selectedFeature.floor_area }}平方米</p>
-          <p><strong>服务规模：</strong>{{ selectedFeature.scale }}座/床</p>
+          <p><strong>服务规模：</strong>{{ selectedFeature.scale }}人</p>
         </div>
         <div v-else>
           <p><strong>用地类型：</strong>{{ selectedFeature.type }}</p>
@@ -164,7 +164,7 @@
             <input v-model="pointsForm.floor_area" type="number" required placeholder="手动输入">
           </div>
           <div class="form-group">
-            <label>服务规模（座/床）：</label>
+            <label>服务规模（人）：</label>
             <input v-model="pointsForm.scale" type="number" placeholder="手动输入">
           </div>
           <div class="form-buttons">
@@ -694,7 +694,8 @@ async function loadPointsAndLands() {
           verticalOrigin: Cesium.VerticalOrigin.CENTER,
           horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
           scale: 0.8,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
         },
         label: {
           text: point.name,
@@ -706,7 +707,8 @@ async function loadPointsAndLands() {
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
           verticalOrigin: Cesium.VerticalOrigin.CENTER,
           horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
         },
         properties: point
       })
@@ -911,7 +913,7 @@ function showCesiumPopup(properties, screenPosition) {
     html += `<p><strong>设施级别：</strong>${properties.level || '-'}</p>`
     html += `<p><strong>设施类型：</strong>${properties.type || '-'}</p>`
     html += `<p><strong>建筑面积：</strong>${properties.floor_area || 0}平方米</p>`
-    html += `<p><strong>服务规模：</strong>${properties.scale || 0}座/床</p>`
+    html += `<p><strong>服务规模：</strong>${properties.scale || 0}人</p>`
   } else if (properties.site_area !== undefined) {
     // 设施用地
     html += `<p><strong>用地类型：</strong>${properties.type || '-'}</p>`
