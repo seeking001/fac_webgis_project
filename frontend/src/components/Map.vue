@@ -391,6 +391,10 @@ let pointModify = null
 let landsModify = null
 let currentHighlightFeature = null  // 记录当前高亮的要素
 let Cesium = null    // 保存 Cesium 模块引用
+let cesiumPopupDiv = null  // Cesium 弹窗元素
+let cesiumPopupCloseBtn = null  // Cesium 弹窗内容元素
+let lastPosition = null
+let updateInterval = null
 
 const vectorStore = useVectorStore()
 
@@ -537,6 +541,7 @@ async function loadCesium() {
     animation: false,             // 动画器件
     timeline: false,              // 时间线
     infoBox: false,               // 实体信息
+    imageryProvider: false,       // 禁用默认影像提供器
   })
   
   // 移除 Cesium 默认的logo
@@ -663,12 +668,13 @@ async function loadPointsAndLands() {
     filteredPoints.forEach(point => {
       const [lng, lat] = point.geometry.coordinates
       const entity = viewer.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(lng, lat),
+        position: Cesium.Cartesian3.fromDegrees(lng, lat, 0.1),
         billboard: {
           image: getPointIcon(point.type),
           verticalOrigin: Cesium.VerticalOrigin.CENTER,
           horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-          scale: 0.8
+          scale: 0.8,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
         },
         label: {
           text: point.name,
@@ -679,7 +685,8 @@ async function loadPointsAndLands() {
           outlineWidth: 2,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
           verticalOrigin: Cesium.VerticalOrigin.CENTER,
-          horizontalOrigin: Cesium.HorizontalOrigin.LEFT
+          horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
         },
         properties: point
       })
@@ -774,26 +781,61 @@ function setupCesiumClickHandler() {
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
 }
 
-// 显示三维弹窗（简单 div）
-let cesiumPopupDiv = null;
+// 显示三维弹窗
 function showCesiumPopup(properties, screenPosition) {
   if (!cesiumPopupDiv) {
     cesiumPopupDiv = document.createElement('div');
     cesiumPopupDiv.className = 'cesium-popup';
     document.body.appendChild(cesiumPopupDiv);
+
+    // 添加关闭按钮
+    cesiumPopupCloseBtn = document.createElement('button')
+    cesiumPopupCloseBtn.className = 'cesium-popup-close'
+    cesiumPopupCloseBtn.innerHTML = '×'
+    cesiumPopupCloseBtn.onclick = closeCesiumPopup
+    cesiumPopupDiv.appendChild(cesiumPopupCloseBtn)
   }
-  // 填充内容（类似二维弹窗）
-  let html = `<h4>${properties.name || '建筑'}</h4>`;
-  if (properties.height) html += `<p>高度: ${properties.height}米</p>`;
-  if (properties.type) html += `<p>类型: ${properties.type}</p>`;
-  if (properties.floor_area) html += `<p>建筑面积: ${properties.floor_area}㎡</p>`;
-  // 设置位置
-  cesiumPopupDiv.style.left = `${screenPosition.x + 20}px`;
-  cesiumPopupDiv.style.top = `${screenPosition.y}px`;
-  cesiumPopupDiv.style.display = 'block';
+
+  // 构建弹窗内容
+  let html = `<h4>${properties.name || '未命名'}</h4>`;
+  // 通过字段自动判断类型
+  if (properties.level !== undefined) {
+    // 设施点
+    html += `<p><strong>设施级别：</strong>${properties.level || '-'}</p>`
+    html += `<p><strong>设施类型：</strong>${properties.type || '-'}</p>`
+    html += `<p><strong>建筑面积：</strong>${properties.floor_area || 0}平方米</p>`
+    html += `<p><strong>服务规模：</strong>${properties.scale || 0}座/床</p>`
+  } else if (properties.site_area !== undefined) {
+    // 设施用地
+    html += `<p><strong>用地类型：</strong>${properties.type || '-'}</p>`
+    html += `<p><strong>用地面积：</strong>${properties.site_area || 0}平方米</p>`
+  } else {
+    // 建筑
+    if (properties.type) html += `<p><strong>建筑类型：</strong>${properties.type}</p>`
+    if (properties.height) html += `<p><strong>建筑高度：</strong>${properties.height}米</p>`
+    if (properties.up_floor) html += `<p><strong>地上层数：</strong>${properties.up_floor}层</p>`
+    if (properties.down_floor) html += `<p><strong>地下层数：</strong>${properties.down_floor}层</p>`
+    if (properties.floor_area) html += `<p><strong>建筑面积：</strong>${properties.floor_area}平方米</p>`
+  }
+
+  cesiumPopupDiv.innerHTML = html
+  cesiumPopupDiv.appendChild(cesiumPopupCloseBtn)
+  cesiumPopupDiv.style.display = 'block'
+  
+  // 设置弹窗位置（使用 screenPosition）
+  cesiumPopupDiv.style.left = `${screenPosition.x + 15}px`
+  cesiumPopupDiv.style.top = `${screenPosition.y - 10}px`
 }
+
+// 关闭弹窗
 function closeCesiumPopup() {
-  if (cesiumPopupDiv) cesiumPopupDiv.style.display = 'none';
+  if (cesiumPopupDiv) {
+    cesiumPopupDiv.style.display = 'none'
+  }
+  if (updateInterval) {
+    clearInterval(updateInterval)
+    updateInterval = null
+  }
 }
 
 // ==================== 图层操作 ====================
@@ -1764,27 +1806,56 @@ onUnmounted(() => {
 /* 三维弹窗样式 */
 .cesium-popup {
   position: absolute;
-  background: rgba(30, 0, 60, 0.9);
-  padding: 8px 15px;
-  border-radius: 5px;
-  color: white;
+  background: rgba(30, 0, 60, 0.5);
+  padding: 10px 30px 10px 15px;
+  border-radius: 8px;
+  color: #eee;
   z-index: 1000;
-  pointer-events: none;
   font-size: 14px;
-  max-width: 250px;
-  backdrop-filter: blur(5px);
+  min-width: 200px;
+  max-width: 300px;
   border: 1px solid rgba(255, 255, 255, 0.2);
+  pointer-events: auto;
 }
 
 .cesium-popup h4 {
-  margin: 0 0 5px;
-  border-bottom: 1px solid #aaa;
+  margin: 0 0 8px 0;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
   color: #ffd700;
+  font-size: 16px;
 }
 
 .cesium-popup p {
-  margin: 3px 0;
-  font-size: 12px;
+  margin: 5px 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.cesium-popup strong {
+  color: #ffd700;
+}
+
+.cesium-popup-close {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 22px;
+  height: 22px;
+  background: rgba(50, 0, 100, 0.8);
+  border-radius: 50%;
+  border: none;
+  color: #eee;
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cesium-popup-close:hover {
+  background: rgb(50, 0, 100);
+  color: #ffd700;
 }
 
 /* 左侧栏样式 */
