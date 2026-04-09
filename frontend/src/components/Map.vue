@@ -53,6 +53,9 @@
         <div class="control-group">
           <button @click="startFlythrough" class="fly-btn">漫游飞行</button>
         </div>
+        <div class="control-group">
+          <button @click="startFlythroughAnalysis" class="fly-btn">漫游分析</button>
+        </div>
       </div>
     </div>
 
@@ -249,7 +252,7 @@ import proj4 from 'proj4'
 
 // 内部模块
 import { useVectorStore } from '../stores/vectorStore'
-import { createPoints, updatePoints, deletePoints, createLands, updateLands, deleteLands } from '../services/api'
+import { createPoints, updatePoints, deletePoints, createLands, updateLands, deleteLands, getEducationSupply } from '../services/api'
 
 // ==================== 常量定义 ====================
 proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
@@ -392,6 +395,8 @@ const importFeatures = ref([])
 const pointsForm = ref({ name: '', level: '', type: '', floor_area: null, scale: null })
 const landsForm = ref({ name: '', type: '', site_area: null })
 
+const vectorStore = useVectorStore()
+
 let drawFeature = null
 let drawInteraction = null
 let drawLayer = null
@@ -405,7 +410,12 @@ let lastHighlighted = null
 let updateInterval = null
 let isFlying = false   // 飞行漫游状态
 
-const vectorStore = useVectorStore()
+// 教育设施供需分析相关变量
+let educationSupplyData = []          // 存储供需数据
+let currentAnalysisEntity = null      // 当前分析用的临时实体（柱体、圆盘）
+let analysisTimer = null              // 分析停留计时器
+let originalBuildingColors = new Map() // 存储建筑原色（如果做高亮需要）
+
 
 // ==================== 计算属性 ====================
 const pointsCount = computed(() => vectorStore.points.length)
@@ -597,6 +607,8 @@ async function loadCesium() {
   await loadPointsAndLands()
   // 设置点击事件
   setupCesiumClickHandler()
+  // 预加载教育设施供需分析数据
+  await loadEducationSupplyData()
   
   cesiumInitialized = true
 }
@@ -737,6 +749,17 @@ async function loadPointsAndLands() {
       })
       landEntities.push(entity)
     })
+  }
+}
+
+// 预加载教育设施供需分析数据
+async function loadEducationSupplyData() {
+  try {
+    const res = await getEducationSupply();
+    if (res.success) educationSupplyData = res.data;
+    else console.error('加载供需数据失败', res.message);
+  } catch (err) {
+    console.error('加载供需数据异常', err);
   }
 }
 
@@ -890,6 +913,128 @@ async function startFlythrough() {
   }
 }
 
+// 教育设施供需分析飞行漫游
+async function startFlythroughAnalysis() {
+  if (!viewer || isFlying) return;
+  isFlying = true;
+  
+  // 获取教育设施列表（已有供需数据）
+  const facilities = educationSupplyData.filter(f => 
+    ['幼儿园','小学','初中','九年一贯制学校'].includes(f.type)
+  );
+  // 选择前5个作为分析点（或按需排序）
+  const analysisPoints = facilities.slice(0, 5);
+  
+  try {
+    viewer.scene.screenSpaceCameraController.enableInputs = false;
+    
+    for (let i = 0; i < analysisPoints.length; i++) {
+      const fac = analysisPoints[i];
+      // 飞行到设施上空
+      await flyToFacility(fac);
+      
+      // 触发分析显示
+      await showAnalysisForFacility(fac);
+      
+      // 停留3秒
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // 清除分析图形
+      clearAnalysisGraphics();
+    }
+    
+    // 最后飞回整体视图
+    await new Promise((resolve) => {
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(114.03, 22.58, 1800),
+        orientation: { heading: Cesium.Math.toRadians(-10), pitch: Cesium.Math.toRadians(-30), roll: 0 },
+        duration: 3,
+        complete: resolve
+      });
+    });
+  } finally {
+    viewer.scene.screenSpaceCameraController.enableInputs = true;
+    isFlying = false;
+  }
+}
+
+// 飞行到指定设施
+function flyToFacility(fac) {
+  return new Promise((resolve) => {
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(fac.lng + 0.013, fac.lat - 0.013, 1500),
+      orientation: {
+        heading: Cesium.Math.toRadians(-45),
+        pitch: Cesium.Math.toRadians(-35),
+        roll: 0
+      },
+      duration: 2,
+      complete: resolve
+    });
+  });
+}
+
+// 显示设施的分析效果
+async function showAnalysisForFacility(fac) {
+  // 确定半径和颜色
+  let radius = 0;
+  if (fac.type === '幼儿园') radius = 300;
+  else if (fac.type === '小学') radius = 500;
+  else if (fac.type === '初中') radius = 1000;
+  else if (fac.type === '九年一贯制学校') radius = 1000;
+  
+  let color = '#808080'; // 灰色默认
+  if (fac.status === 'sufficient') color = '#4caf50';
+  else if (fac.status === 'balanced') color = '#ffc107';
+  else if (fac.status === 'insufficient') color = '#f44336';
+  if (!fac.supplyRatio) color = '#808080';
+  
+  // 柱体高度映射：max 200米，min 50米（学位数100~2000映射）
+  const height = 50 + (fac.scale / 2000) * 150;
+  
+  // 绘制立体柱
+  const cylinder = drawSupplyColumn(fac.lng, fac.lat, height, color, `${fac.name}\n${fac.scale}学位`);
+  // 绘制服务半径圆盘
+  const ellipse = drawServiceRadius(fac.lng, fac.lat, radius, color);
+  
+  currentAnalysisEntity = { cylinder, ellipse };
+  
+  // 显示仪表盘（浮动div）
+  showSupplyDemandPanel(fac);
+}
+
+// 显示供需仪表盘
+function showSupplyDemandPanel(fac) {
+  let panel = document.getElementById('supply-demand-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'supply-demand-panel';
+    panel.style.cssText = 'position: absolute; bottom: 20px; right: 20px; width: 300px; background: rgba(0,0,0,0.8); color: white; border-radius: 8px; padding: 12px; z-index: 1000; font-family: sans-serif; backdrop-filter: blur(4px); border-left: 4px solid #ffd700;';
+    document.body.appendChild(panel);
+  }
+  
+  let html = `<h4 style="margin:0 0 8px 0">📊 ${fac.name} (${fac.type})</h4>`;
+  html += `<p><strong>实际学位：</strong> ${fac.scale} 个</p>`;
+  html += `<p><strong>覆盖人口：</strong> ${fac.population} 人</p>`;
+  if (fac.type === '九年一贯制学校') {
+    html += `<p><strong>小学需求：</strong> ${fac.demandPrimary || 0} 学位</p>`;
+    html += `<p><strong>初中需求：</strong> ${fac.demandJunior || 0} 学位</p>`;
+    html += `<p><strong>总需求：</strong> ${fac.demand} 学位</p>`;
+  } else {
+    html += `<p><strong>需求学位：</strong> ${fac.demand} 个</p>`;
+  }
+  html += `<p><strong>供需比：</strong> ${fac.supplyRatio ?? '无数据'}</p>`;
+  html += `<p><strong>评价：</strong> ${fac.status === 'sufficient' ? '充足' : (fac.status === 'balanced' ? '基本平衡' : (fac.status === 'insufficient' ? '不足' : '数据缺失'))}</p>`;
+  panel.innerHTML = html;
+  
+  // 5秒后自动隐藏（或者下次分析时覆盖）
+  if (window.panelTimer) clearTimeout(window.panelTimer);
+  window.panelTimer = setTimeout(() => {
+    if (panel) panel.style.display = 'none';
+  }, 5000);
+  panel.style.display = 'block';
+}
+
 // 显示三维弹窗
 function showCesiumPopup(properties, screenPosition) {
   if (!cesiumPopupDiv) {
@@ -944,6 +1089,61 @@ function closeCesiumPopup() {
   if (updateInterval) {
     clearInterval(updateInterval)
     updateInterval = null
+  }
+}
+
+// ==================== 图层操作 ====================
+// 教育设施供需分析---绘制圆柱体
+function drawSupplyColumn(lng, lat, height, color, label) {
+  const position = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
+  const cylinder = viewer.entities.add({
+    position: position,
+    cylinder: {
+      length: height,
+      topRadius: 15,
+      bottomRadius: 15,
+      material: Cesium.Color.fromCssColorString(color).withAlpha(0.7),
+      outline: true,
+      outlineColor: Cesium.Color.WHITE,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,  // 贴地
+      extrudedHeightReference: Cesium.HeightReference.RELATIVE_TO_GROUND  // 相对地面拉伸
+    },
+    label: {
+      text: label,
+      font: '14px sans-serif',
+      pixelOffset: new Cesium.Cartesian2(0, -height - 10),
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 2,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND  // 标签也贴地
+    }
+  });
+  return cylinder;
+}
+
+// 教育设施供需分析---绘制服务半径圆盘
+function drawServiceRadius(lng, lat, radius, color) {
+  const ellipse = viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+    ellipse: {
+      semiMajorAxis: radius,
+      semiMinorAxis: radius,
+      material: Cesium.Color.fromCssColorString(color).withAlpha(0.3),
+      outline: true,
+      outlineColor: Cesium.Color.fromCssColorString(color),
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND  // 圆盘贴地
+    }
+  });
+  return ellipse;
+}
+
+// 教育设施供需分析---清除当前分析图形
+function clearAnalysisGraphics() {
+  if (currentAnalysisEntity) {
+    if (currentAnalysisEntity.cylinder) viewer.entities.remove(currentAnalysisEntity.cylinder);
+    if (currentAnalysisEntity.ellipse) viewer.entities.remove(currentAnalysisEntity.ellipse);
+    currentAnalysisEntity = null;
   }
 }
 

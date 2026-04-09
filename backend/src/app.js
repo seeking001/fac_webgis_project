@@ -8,6 +8,7 @@ const { testConnection } = require('./config/database');
 const pointRoutes = require('./routes/pointRouter');
 const landRoutes = require('./routes/landRouter');
 const buildingRoutes = require('./routes/buildingRouter');
+const analysisRoutes = require('./routes/analysisRouter');
 
 // 创建express应用实例
 const app = express();
@@ -29,6 +30,8 @@ app.use('/api/points', pointRoutes);
 app.use('/api/lands', landRoutes);
 // 建筑路由
 app.use('/api/buildings', buildingRoutes);
+// 供需分析路由
+app.use('/api/analysis', analysisRoutes);
 
 // 创建服务器启动函数
 const startServer = async () => {

@@ -83,3 +83,8 @@ export async function deleteLands(id) {
     method: 'DELETE'
   });
 }
+
+// 获取教育设施供需数据
+export async function getEducationSupply() {
+  return request('/analysis/education-supply');
+}
