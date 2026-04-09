@@ -52,8 +52,6 @@
         <h4>三维展示</h4>
         <div class="control-group">
           <button @click="startFlythrough" class="fly-btn">漫游飞行</button>
-        </div>
-        <div class="control-group">
           <button @click="startFlythroughAnalysis" class="fly-btn">漫游分析</button>
         </div>
       </div>
@@ -62,6 +60,14 @@
     <!-- 右侧边栏 -->
     <div class="right_sidebar">
       <h3>信息显示</h3>
+      <!-- 供需分析面板 -->
+      <div class="analysis-panel"  style="display: none;">
+        <h4>供需分析</h4>
+        <div id="supply-demand-content" class="analysis-content">
+          <p style="color: #aaa; text-align: center;">分析中...</p>
+        </div>
+      </div>
+
       <div class="status-info">
         <h4>加载状态</h4>
         <div v-for="(config, key) in layers">
@@ -699,7 +705,7 @@ async function loadPointsAndLands() {
     filteredPoints.forEach(point => {
       const [lng, lat] = point.geometry.coordinates
       const entity = viewer.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(lng, lat, 0.1),
+        position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
         billboard: {
           image: getPointIcon(point.type),
           verticalOrigin: Cesium.VerticalOrigin.CENTER,
@@ -821,23 +827,29 @@ function setupCesiumClickHandler() {
         lastHighlighted.polygon.material = lastHighlighted._originalMaterial
       }
       if (lastHighlighted.billboard) lastHighlighted.billboard.scale = 0.8
+      if (lastHighlighted.label) lastHighlighted.label.font = '14px "Microsoft YaHei", Arial, sans-serif'
     }
     
     if (Cesium.defined(pick) && pick.id) {
       const entity = pick.id
       lastHighlighted = entity
       
-      // 先高亮（立即触发渲染）
+      // 点要素高亮
+      if (entity.billboard) {
+        entity.billboard.scale = 1.2
+      }
+      if (entity.label) {
+        entity.label.font = '16px "Microsoft YaHei", Arial, sans-serif';  // 增大字号
+      }
+
+      // 面要素高亮
       if (entity.polygon) {
         if (!entity._originalMaterial) entity._originalMaterial = entity.polygon.material
         entity.polygon.material = Cesium.Color.fromCssColorString('rgba(255, 255, 255, 0.3)')
         entity.polygon.outlineColor = Cesium.Color.BLACK
       }
-      if (entity.billboard) {
-        entity.billboard.scale = 1.2
-      }
       
-      // 后显示弹窗
+      // 显示弹窗
       setTimeout(() => {
         const properties = entity.properties?.getValue() || entity._properties
         if (properties) showCesiumPopup(properties, click.position)
@@ -890,7 +902,7 @@ async function startFlythrough() {
       })
     }
     
-    // 可选：最后飞回整体视图
+    // 最后飞回整体视图
     await new Promise((resolve) => {
       viewer.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(114.03, 22.58, 1800),
@@ -916,6 +928,9 @@ async function startFlythrough() {
 async function startFlythroughAnalysis() {
   if (!viewer || isFlying) return;
   isFlying = true;
+
+  clearAnalysisGraphics();  // 清理上一轮的数据残留
+  showAnalysisPanel();      // 显示分析面板
   
   // 获取教育设施列表（已有供需数据）
   const facilities = educationSupplyData.filter(f => 
@@ -950,6 +965,10 @@ async function startFlythroughAnalysis() {
         duration: 3,
         complete: resolve
       });
+      hideAnalysisPanel();  // 隐藏面板
+      clearAnalysisGraphics();  // 清空分析图形
+      // 清空面板内容
+      document.getElementById('supply-demand-content').innerHTML = '<p style="color: #aaa; text-align: center;">分析中...</p>';
     });
   } finally {
     viewer.scene.screenSpaceCameraController.enableInputs = true;
@@ -1007,34 +1026,50 @@ async function showAnalysisForFacility(fac) {
 
 // 显示供需仪表盘
 function showSupplyDemandPanel(fac) {
-  let panel = document.getElementById('supply-demand-panel');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = 'supply-demand-panel';
-    panel.style.cssText = 'position: absolute; bottom: 20px; right: 20px; width: 300px; background: rgba(0,0,0,0.8); color: white; border-radius: 8px; padding: 12px; z-index: 1000; font-family: sans-serif; backdrop-filter: blur(4px); border-left: 4px solid #ffd700;';
-    document.body.appendChild(panel);
-  }
+  const container = document.getElementById('supply-demand-content');
+  if (!container) return;
   
-  let html = `<h4 style="margin:0 0 8px 0">📊 ${fac.name} (${fac.type})</h4>`;
-  html += `<p><strong>实际学位：</strong> ${fac.scale} 个</p>`;
-  html += `<p><strong>覆盖人口：</strong> ${fac.population} 人</p>`;
-  if (fac.type === '九年一贯制学校') {
-    html += `<p><strong>小学需求：</strong> ${fac.demandPrimary || 0} 学位</p>`;
-    html += `<p><strong>初中需求：</strong> ${fac.demandJunior || 0} 学位</p>`;
-    html += `<p><strong>总需求：</strong> ${fac.demand} 学位</p>`;
+  let html = '';
+  
+  if (!fac || fac.status === 'no_data') {
+    html = '<p style="color: #aaa; text-align: center;">暂无数据</p>';
   } else {
-    html += `<p><strong>需求学位：</strong> ${fac.demand} 个</p>`;
+    html = `<p class="school-name">${fac.name}</p>`;
+    html += `<p><strong>学校类型：</strong> ${fac.type}</p>`;
+    html += `<p><strong>实际学位：</strong> ${fac.scale} 个</p>`;
+    html += `<p><strong>覆盖人口：</strong> ${fac.population.toLocaleString()} 人</p>`;
+    
+    if (fac.type === '九年一贯制学校') {
+      html += `<p><strong>小学需求：</strong> ${fac.demandPrimary || 0} 学位</p>`;
+      html += `<p><strong>初中需求：</strong> ${fac.demandJunior || 0} 学位</p>`;
+      html += `<p><strong>总需求：</strong> ${fac.demand} 学位</p>`;
+    } else {
+      html += `<p><strong>需求学位：</strong> ${fac.demand} 个</p>`;
+    }
+    
+    const ratioColor = fac.supplyRatio >= 1.1 ? '#4caf50' : (fac.supplyRatio >= 0.9 ? '#ffc107' : '#f44336');
+    html += `<p><strong>供需比：</strong> <span style="color: ${ratioColor}; font-weight: bold;">${fac.supplyRatio || '-'}</span></p>`;
+    
+    let statusText = '';
+    if (fac.status === 'sufficient') statusText = '充足 ✅';
+    else if (fac.status === 'balanced') statusText = '基本平衡 ⚠️';
+    else if (fac.status === 'insufficient') statusText = '不足 ❌';
+    html += `<p><strong>评价：</strong> ${statusText}</p>`;
   }
-  html += `<p><strong>供需比：</strong> ${fac.supplyRatio ?? '无数据'}</p>`;
-  html += `<p><strong>评价：</strong> ${fac.status === 'sufficient' ? '充足' : (fac.status === 'balanced' ? '基本平衡' : (fac.status === 'insufficient' ? '不足' : '数据缺失'))}</p>`;
-  panel.innerHTML = html;
   
-  // 5秒后自动隐藏（或者下次分析时覆盖）
-  if (window.panelTimer) clearTimeout(window.panelTimer);
-  window.panelTimer = setTimeout(() => {
-    if (panel) panel.style.display = 'none';
-  }, 5000);
-  panel.style.display = 'block';
+  container.innerHTML = html;
+}
+
+// 显示供需分析面板
+function showAnalysisPanel() {
+  const panel = document.querySelector('.analysis-panel');
+  if (panel) panel.style.display = 'block';
+}
+
+// 隐藏供需分析面板
+function hideAnalysisPanel() {
+  const panel = document.querySelector('.analysis-panel');
+  if (panel) panel.style.display = 'none';
 }
 
 // 显示三维弹窗
@@ -2356,6 +2391,42 @@ onUnmounted(() => {
   padding: 3px;
   font-size: 14px;
   color: #e8ff66;
+}
+
+/* 供需分析样式 */
+.analysis-panel {
+  margin: 10px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.analysis-panel h4 {
+  padding-bottom: 5px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 16px;
+  color: #b3c6ff;
+}
+
+.analysis-content {
+  font-size: 14px;
+  color: #eee;
+  line-height: 1.5;
+  padding: 5px;
+}
+
+.analysis-content .school-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #390;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.analysis-content p {
+  margin: 5px 0;
 }
 
 /* 要素弹窗样式 */
