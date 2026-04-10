@@ -717,7 +717,7 @@ async function loadPointsAndLands() {
         label: {
           text: point.name,
           font: '14px "Microsoft YaHei", Arial, sans-serif',
-          pixelOffset: new Cesium.Cartesian2(10, -2),
+          pixelOffset: new Cesium.Cartesian2(15, -2),
           fillColor: Cesium.Color.WHITE,
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 2,
@@ -996,12 +996,26 @@ function flyToFacility(fac) {
 async function showAnalysisForFacility(fac) {
   clearAnalysisGraphics();
   
+  // 根据设施类型设置服务半径
   let radius = 0;
   if (fac.type === '幼儿园') radius = 300;
   else if (fac.type === '小学') radius = 500;
   else if (fac.type === '初中') radius = 1000;
   else if (fac.type === '九年一贯制学校') radius = 1000;
+
+  // 计算柱体高度
+  const minHeight = 30;
+  const maxHeight = 600;
+  const minScale = 300;
+  const maxScale = 6000;
   
+  let actualHeight = minHeight + (fac.scale - minScale) / (maxScale - minScale) * (maxHeight - minHeight);
+  actualHeight = Math.min(maxHeight, Math.max(minHeight, actualHeight));
+  
+  let demandHeight = minHeight + (fac.demand - minScale) / (maxScale - minScale) * (maxHeight - minHeight);
+  demandHeight = Math.min(maxHeight, Math.max(minHeight, demandHeight));
+  
+  // 根据供需状态设置颜色
   let color = '#808080';
   let status = fac.status;
   if (status === 'sufficient') color = '#4caf50';
@@ -1015,9 +1029,14 @@ async function showAnalysisForFacility(fac) {
   }
   
   // 绘制双色柱
-  drawSupplyColumn(fac.lng, fac.lat, fac.scale, demandScale, color, status, fac.name);
+  drawDualColorColumn(
+    fac.lng, fac.lat, 
+    actualHeight, demandHeight, 
+    fac.scale, fac.demand, 
+    fac.name
+  );
   
-  // 绘制动态波纹圆盘
+  // 绘制服务半径圆盘
   drawServiceRadius(fac.lng, fac.lat, radius, color);
   
   // 显示仪表盘
@@ -1131,110 +1150,146 @@ function closeCesiumPopup() {
 
 // ==================== 图层操作 ====================
 // 教育设施供需分析---绘制圆柱体(双色柱+目标线)
-function drawSupplyColumn(lng, lat, actualScale, demandScale, color, status, name) {
-  const position = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
+function drawHalfCylinder(lng, lat, height, color, startAngle, endAngle) {
+  const radius = 30;  // 半径（米）
+  const segments = 20; // 分段数
+  const positions = [];
   
-  // 高度映射：最高150米，最低30米
-  const maxHeight = 150;
-  const minHeight = 30;
-  const maxScale = 2000;  // 最大学位数参考值
+  // 生成指定角度范围内的圆弧点
+  for (let i = 0; i <= segments; i++) {
+    const angle = startAngle + (endAngle - startAngle) * i / segments;
+    const dx = radius * Math.cos(angle);
+    const dy = radius * Math.sin(angle);
+    const offsetLng = dx / 111000;
+    const offsetLat = dy / 111000;
+    positions.push([lng + offsetLng, lat + offsetLat]);
+  }
   
-  const actualHeight = minHeight + (actualScale / maxScale) * maxHeight;
-  const demandHeight = minHeight + (demandScale / maxScale) * maxHeight;
+  // 添加圆心点（使形状为扇形）
+  positions.unshift([lng, lat]);
   
-  // 实际供给柱（绿色/黄色/红色）
-  const supplyColor = status === 'sufficient' ? '#4caf50' : (status === 'balanced' ? '#ffc107' : '#f44336');
-  
-  const supplyColumn = viewer.entities.add({
-    position: position,
-    cylinder: {
-      length: actualHeight,
-      topRadius: 12,
-      bottomRadius: 12,
-      material: Cesium.Color.fromCssColorString(supplyColor).withAlpha(0.8),
-      outline: true,
-      outlineColor: Cesium.Color.WHITE,
+  const polygon = viewer.entities.add({
+    polygon: {
+      hierarchy: Cesium.Cartesian3.fromDegreesArray(
+        positions.flatMap(p => [p[0], p[1]])
+      ),
+      extrudedHeight: height,
+      material: Cesium.Color.fromCssColorString(color).withAlpha(0.6),
+      // outline: true,
+      // outlineColor: Cesium.Color.WHITE,
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
       extrudedHeightReference: Cesium.HeightReference.RELATIVE_TO_GROUND
-    },
+    }
+  });
+  return polygon;
+}
+
+function drawDualColorColumn(lng, lat, actualHeight, demandHeight, actualScale, demandScale, name) {
+  const splitAngle = -35 * Math.PI / 180;
+  const gap = 3;  // 间距（米）
+  const gapOffset = gap / 2 / 111000;  // 转换为经纬度偏移（约 0.0000135）
+  
+  // 绿色半圆柱向左偏移
+  const greenLng = lng - gapOffset;
+  const greenLat = lat - gapOffset;
+  
+  // 红色半圆柱向右偏移
+  const redLng = lng + gapOffset;
+  const redLat = lat + gapOffset;
+  
+  // 绿色半圆柱（供给）
+  const supplyColumn = drawHalfCylinder(greenLng, greenLat, actualHeight, '#4caf50', splitAngle - Math.PI, splitAngle);
+  
+  // 红色半圆柱（需求）
+  const demandColumn = drawHalfCylinder(redLng, redLat, demandHeight, '#f44336', splitAngle, splitAngle + Math.PI);
+  
+  // 顶部标签（保持在中心位置）
+  const maxHeight = Math.max(actualHeight, demandHeight);
+  const label = viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(lng, lat, maxHeight + 15),
     label: {
-      text: `${name}\n${actualScale}学位`,
-      font: '12px sans-serif',
-      pixelOffset: new Cesium.Cartesian2(0, -actualHeight - 5),
+      text: `${name}\n${actualScale} / ${demandScale}`,
+      font: '12px "Microsoft YaHei", sans-serif',
       fillColor: Cesium.Color.WHITE,
       outlineColor: Cesium.Color.BLACK,
       outlineWidth: 2,
-      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM
     }
   });
   
-  // 需求缺口柱（红色，只显示超出实际供给的部分）
-  let gapHeight = 0;
-  let gapColor = '#f44336';
-  
-  if (demandScale > actualScale) {
-    gapHeight = demandHeight - actualHeight;
-    const gapColumn = viewer.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(lng, lat, actualHeight),
-      cylinder: {
-        length: gapHeight,
-        topRadius: 12,
-        bottomRadius: 12,
-        material: Cesium.Color.fromCssColorString(gapColor).withAlpha(0.9),
-        outline: true,
-        outlineColor: Cesium.Color.WHITE,
-        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-        extrudedHeightReference: Cesium.HeightReference.RELATIVE_TO_GROUND
-      }
-    });
-    analysisEntities.push(gapColumn);
-  }
-  
-  // 目标线（半透明虚线环，在需求高度处）
-  if (demandScale > 0) {
-    const targetRing = viewer.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(lng, lat, demandHeight),
-      ellipse: {
-        semiMajorAxis: 18,
-        semiMinorAxis: 18,
-        material: Cesium.Color.fromCssColorString('#ffffff').withAlpha(0.5),
-        outline: true,
-        outlineColor: Cesium.Color.YELLOW,
-        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND
-      }
-    });
-    analysisEntities.push(targetRing);
-  }
-  
-  analysisEntities.push(supplyColumn);
-  return supplyColumn;
+  analysisEntities.push(supplyColumn, demandColumn, label);
 }
 
 // 教育设施供需分析---绘制服务半径圆盘（动态波纹效果）
-function drawServiceRadius(lng, lat, radius, color) {
-  const ellipse = viewer.entities.add({
+function drawServiceRadius(lng, lat, maxRadius, color) {
+  // 静态底圆
+  const baseEllipse = viewer.entities.add({
     position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
     ellipse: {
-      semiMajorAxis: radius,
-      semiMinorAxis: radius,
-      material: Cesium.Color.fromCssColorString(color).withAlpha(0.3),
-      outline: true,
-      outlineColor: Cesium.Color.fromCssColorString(color),
+      semiMajorAxis: maxRadius,
+      semiMinorAxis: maxRadius,
+      material: Cesium.Color.fromCssColorString(color).withAlpha(0.15),
+      outline: false,
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
     }
   });
-  analysisEntities.push(ellipse);
-  return ellipse;
+  analysisEntities.push(baseEllipse);
+  
+  // 创建3个波纹圆环，不同半径
+  const rings = [
+    { radius: maxRadius * 0.3, alpha: 0.6, expanding: true, current: maxRadius * 0.3 },
+    { radius: maxRadius * 0.6, alpha: 0.4, expanding: true, current: maxRadius * 0.6 },
+    { radius: maxRadius * 0.9, alpha: 0.2, expanding: true, current: maxRadius * 0.9 }
+  ];
+  
+  const ringEntities = [];
+  rings.forEach((ring, idx) => {
+    const entity = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(lng, lat, 0.1),
+      ellipse: {
+        semiMajorAxis: ring.radius,
+        semiMinorAxis: ring.radius,
+        material: Cesium.Color.fromCssColorString(color).withAlpha(ring.alpha),
+        outline: true,
+        outlineColor: Cesium.Color.fromCssColorString(color),
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+      }
+    });
+    ringEntities.push(entity);
+    analysisEntities.push(entity);
+  });
+  
+  // 简单的透明度闪烁动画（不改变半径，只改变透明度）
+  let direction = 1;
+  const interval = setInterval(() => {
+    ringEntities.forEach((entity, idx) => {
+      if (!entity || !viewer) return;
+      const baseAlpha = [0.6, 0.4, 0.2][idx];
+      // 透明度在 baseAlpha 上下波动
+      const alpha = baseAlpha + direction * 0.15;
+      const finalAlpha = Math.min(0.8, Math.max(0.1, alpha));
+      entity.ellipse.material = Cesium.Color.fromCssColorString(color).withAlpha(finalAlpha);
+    });
+    direction *= -1;
+  }, 500);
+  
+  // 存储 interval
+  if (!window.rippleIntervals) window.rippleIntervals = [];
+  window.rippleIntervals.push(interval);
 }
 
 // 教育设施供需分析---清除当前分析图形和停止动画
 function clearAnalysisGraphics() {
-  if (rippleInterval) {
-    clearInterval(rippleInterval);
-    rippleInterval = null;
+  // 清理所有波纹动画
+  if (window.rippleIntervals) {
+    window.rippleIntervals.forEach(interval => clearInterval(interval));
+    window.rippleIntervals = [];
   }
+  
   for (const entity of analysisEntities) {
-    if (entity) {
+    if (entity && viewer.entities.contains(entity)) {
       viewer.entities.remove(entity);
     }
   }
