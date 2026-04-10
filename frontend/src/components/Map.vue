@@ -1151,7 +1151,7 @@ function closeCesiumPopup() {
 // ==================== 图层操作 ====================
 // 教育设施供需分析---绘制圆柱体(双色柱+目标线)
 function drawHalfCylinder(lng, lat, height, color, startAngle, endAngle) {
-  const radius = 30;  // 半径（米）
+  const radius = 50;  // 半径（米）
   const segments = 20; // 分段数
   const positions = [];
   
@@ -1224,58 +1224,116 @@ function drawDualColorColumn(lng, lat, actualHeight, demandHeight, actualScale, 
 
 // 教育设施供需分析---绘制服务半径圆盘（动态波纹效果）
 function drawServiceRadius(lng, lat, maxRadius, color) {
-  // 静态底圆
+  if (!maxRadius || isNaN(maxRadius) || maxRadius <= 0) {
+    console.warn('drawServiceRadius: 无效的半径', maxRadius);
+    return;
+  }
+  
+  const MIN_RADIUS = 1;
+  
+  // 静态底圆（淡色背景）
   const baseEllipse = viewer.entities.add({
     position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
     ellipse: {
-      semiMajorAxis: maxRadius,
-      semiMinorAxis: maxRadius,
-      material: Cesium.Color.fromCssColorString(color).withAlpha(0.15),
+      semiMajorAxis: Math.max(MIN_RADIUS, maxRadius),
+      semiMinorAxis: Math.max(MIN_RADIUS, maxRadius),
+      material: Cesium.Color.fromCssColorString(color).withAlpha(0.2),
       outline: false,
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
     }
   });
   analysisEntities.push(baseEllipse);
   
-  // 创建3个波纹圆环，不同半径
-  const rings = [
-    { radius: maxRadius * 0.3, alpha: 0.6, expanding: true, current: maxRadius * 0.3 },
-    { radius: maxRadius * 0.6, alpha: 0.4, expanding: true, current: maxRadius * 0.6 },
-    { radius: maxRadius * 0.9, alpha: 0.2, expanding: true, current: maxRadius * 0.9 }
-  ];
+  // 存储波纹对象
+  const waves = [];
+  let waveId = 0;
   
-  const ringEntities = [];
-  rings.forEach((ring, idx) => {
-    const entity = viewer.entities.add({
+  // 创建单个波纹
+  function createWave() {
+    const id = waveId++;
+    const wave = {
+      id: id,
+      radius: 0,
+      alpha: 0.7,
+      active: true,
+      entity: null
+    };
+    
+    // 创建椭圆实体
+    wave.entity = viewer.entities.add({
       position: Cesium.Cartesian3.fromDegrees(lng, lat, 0.1),
       ellipse: {
-        semiMajorAxis: ring.radius,
-        semiMinorAxis: ring.radius,
-        material: Cesium.Color.fromCssColorString(color).withAlpha(ring.alpha),
+        semiMajorAxis: 0,
+        semiMinorAxis: 0,
+        material: Cesium.Color.fromCssColorString(color).withAlpha(0.6),
         outline: true,
         outlineColor: Cesium.Color.fromCssColorString(color),
+        outlineWidth: 3,
         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
       }
     });
-    ringEntities.push(entity);
-    analysisEntities.push(entity);
-  });
+    analysisEntities.push(wave.entity);
+    waves.push(wave);
+    return wave;
+  }
   
-  // 简单的透明度闪烁动画（不改变半径，只改变透明度）
-  let direction = 1;
+  // 移除波纹
+  function removeWave(wave) {
+    if (wave.entity && viewer.entities.contains(wave.entity)) {
+      viewer.entities.remove(wave.entity);
+    }
+    wave.active = false;
+  }
+  
+  let lastCreateTime = 0;
+  
   const interval = setInterval(() => {
-    ringEntities.forEach((entity, idx) => {
-      if (!entity || !viewer) return;
-      const baseAlpha = [0.6, 0.4, 0.2][idx];
-      // 透明度在 baseAlpha 上下波动
-      const alpha = baseAlpha + direction * 0.15;
-      const finalAlpha = Math.min(0.8, Math.max(0.1, alpha));
-      entity.ellipse.material = Cesium.Color.fromCssColorString(color).withAlpha(finalAlpha);
-    });
-    direction *= -1;
-  }, 500);
+    const now = Date.now();
+    
+    // 每隔 400ms 创建一个新波纹（控制频率）
+    if (now - lastCreateTime > 500) {
+      createWave();
+      lastCreateTime = now;
+    }
+    
+    // 更新所有波纹
+    for (let i = waves.length - 1; i >= 0; i--) {
+      const wave = waves[i];
+      if (!wave.active) {
+        waves.splice(i, 1);
+        continue;
+      }
+      
+      // 半径扩大（速度 20 米/帧）
+      wave.radius += 30;
+      
+      // 透明度衰减
+      wave.alpha = 0.5 * (1 - wave.radius / maxRadius);
+      
+      // 边框宽度随半径增加而变细
+      const width = Math.max(1, 3 - (wave.radius / maxRadius) * 30);
+      
+      // 超出最大半径则移除
+      if (wave.radius >= maxRadius) {
+        removeWave(wave);
+        continue;
+      }
+      
+      // 确保半径有效
+      const currentRadius = Math.max(MIN_RADIUS, wave.radius);
+      
+      try {
+        wave.entity.ellipse.semiMajorAxis = currentRadius;
+        wave.entity.ellipse.semiMinorAxis = currentRadius;
+        wave.entity.ellipse.material = Cesium.Color.fromCssColorString(color).withAlpha(wave.alpha);
+        wave.entity.ellipse.outlineWidth = width;
+        wave.entity.ellipse.outlineColor = Cesium.Color.fromCssColorString(color).withAlpha(wave.alpha);
+      } catch (e) {
+        removeWave(wave);
+      }
+    }
+  }, 80);
   
-  // 存储 interval
   if (!window.rippleIntervals) window.rippleIntervals = [];
   window.rippleIntervals.push(interval);
 }
