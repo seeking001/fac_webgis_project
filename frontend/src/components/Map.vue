@@ -485,7 +485,7 @@ function initMap() {
   map = new Map({
     target: mapContainer.value,
     layers: [basemaps.value[0].layer, basemaps.value[0].roadNetLayer],
-    view: new View({ center: fromLonLat([114.03, 22.61]), zoom: 15, projection: 'EPSG:3857' }),
+    view: new View({ center: fromLonLat([114.0245, 22.6115]), zoom: 15, projection: 'EPSG:3857' }),
     controls: defaults().extend([
       new FullScreen(),
       new ScaleLine(),
