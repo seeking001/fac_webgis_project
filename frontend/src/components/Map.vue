@@ -499,12 +499,10 @@ function initMap() {
 async function switchBasemap(basemapId) {
   if (!map || activeBasemapId.value === basemapId) return
   
-  // 三维地图特殊处理
   if (basemapId === '3d') {
-    // 隐藏 2D 地图容器
-    map.getTargetElement().style.display = 'none'
-    // 显示 3D 容器
-    if (cesiumContainer.value) cesiumContainer.value.style.display = 'block'
+    //三维地图切换逻辑
+    map.getTargetElement().style.display = 'none'  // 隐藏 2D 地图容器
+    if (cesiumContainer.value) cesiumContainer.value.style.display = 'block'  // 显示 3D 容器
     
     // 加载 Cesium
     if (!cesiumInitialized) {
@@ -518,30 +516,31 @@ async function switchBasemap(basemapId) {
     }
     activeBasemapId.value = basemapId
     return
-  }
-  
-  const oldLayers = map.getLayers().getArray().filter(layer => layer instanceof TileLayer)
-  oldLayers.forEach(layer => map.removeLayer(layer))
-  
-  const newBasemap = basemaps.value.find(b => b.id === basemapId)
-  if (newBasemap && newBasemap.layer) {
-    map.addLayer(newBasemap.layer)
-    if (newBasemap.roadNetLayer) map.addLayer(newBasemap.roadNetLayer)
-  }
-  
-  // 如果从 3D 切换回 2D，恢复地图容器显示
-  if (map.getTargetElement()) {
-    map.getTargetElement().style.display = 'block'
-  }
-  if (cesiumContainer.value) {
-    cesiumContainer.value.style.display = 'none'
+  } else {
+    // 二维地图切换逻辑
+    const oldLayers = map.getLayers().getArray().filter(layer => layer instanceof TileLayer)
+    oldLayers.forEach(layer => map.removeLayer(layer))
+    
+    const newBasemap = basemaps.value.find(e => e.id === basemapId)
+    if (newBasemap && newBasemap.layer) {
+      map.addLayer(newBasemap.layer)
+      if (newBasemap.roadNetLayer) map.addLayer(newBasemap.roadNetLayer)
+    }
+    
+    // 恢复显示二维地图容器，隐藏三维地图容器
+    if (map.getTargetElement()) {
+      map.getTargetElement().style.display = 'block'
+    }
+    if (cesiumContainer.value) {
+      cesiumContainer.value.style.display = 'none'
+    }
   }
 
   activeBasemapId.value = basemapId
 }
 
 function toggleRoadNet(basemap) { basemap.roadNetLayer?.setVisible(basemap.roadNetVisible) }
-function getThumbColor(id) { return { vector: '#4CAF50', satellite: '#795548', '3d': '#2196F3' }[id] || '#ccc' }
+function getThumbColor(id) { return { vector: '#1CAF50', satellite: '#795548', '3d': '#2196F3' }[id] || '#ccc' }
 
 // 动态加载 Cesium 的函数
 async function loadCesium() {
