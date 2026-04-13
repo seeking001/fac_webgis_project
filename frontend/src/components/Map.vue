@@ -774,7 +774,7 @@ function getPointIcon(type) {
   const canvas = document.createElement('canvas')
   canvas.width = 32
   canvas.height = 32
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   
   // 绘制图标符号
   ctx.fillStyle = 'white'
