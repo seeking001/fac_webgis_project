@@ -376,7 +376,7 @@ const mapContainer = ref(null)
 const cesiumContainer = ref(null)  // Cesium 地图容器
 let map = null
 let viewer = null;          // Cesium Viewer 实例
-let cesiumInitialized = false;
+let cesiumInitialized = false;   // Cesium 是否已初始化的标志
 let buildingDataSource = null;
 let pointEntities = [];
 let landEntities = [];
@@ -556,7 +556,7 @@ async function loadCesium() {
   // 创建地形
   const terrainProvider = await Cesium.createWorldTerrainAsync({
     requestVertexNormals: true,
-    requestWaterMask: true
+    // requestWaterMask: true
   })
   
   // 初始化 Viewer
@@ -574,6 +574,8 @@ async function loadCesium() {
     selectionIndicator: false,    // 选择指示器
     terrainProvider: terrainProvider,  // 使用地形数据
   })
+
+  window.debugViewer = viewer  // 暴露 viewer 供调试使用（后续删除）
   
   // 移除 Cesium 默认的logo
   viewer.cesiumWidget.creditContainer.style.display = 'none'
@@ -609,10 +611,10 @@ async function loadCesium() {
   await loadBuildings()
   // 加载设施点和用地
   await loadPointsAndLands()
-  // 设置点击事件
-  setupCesiumClickHandler()
   // 预加载教育设施供需分析数据
   await loadEducationSupplyData()
+  // 设置点击事件
+  setupCesiumClickHandler()
   
   cesiumInitialized = true
 }
