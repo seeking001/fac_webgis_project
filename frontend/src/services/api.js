@@ -27,13 +27,13 @@ async function request(url, options = {}) {
   return data;
 }
 
-// 获取公共服务设施api
+// 获取公共服务设施点数据
 export async function getPoints() {
   // 默认的API路径，与app.js中app.use('/api/points', pointsRoutes)保持一致
   return request('/points')
 }
 
-// 创建公共设施
+// 创建公共设施点数据
 export async function createPoints(pointData) {
   return request('/points', {
     method: 'POST',
@@ -41,7 +41,7 @@ export async function createPoints(pointData) {
   });
 }
 
-// 更新公共设施
+// 更新公共设施点数据
 export async function updatePoints(id, pointData) {
   return request(`/points/${id}`, {
     method: 'PUT',
@@ -49,14 +49,14 @@ export async function updatePoints(id, pointData) {
   });
 }
 
-// 删除公共设施
+// 删除公共设施点数据
 export async function deletePoints(id) {
   return request(`/points/${id}`, {
     method: 'DELETE'
   });
 }
 
-// 获取土地利用api
+// 获取土地利用数据
 export async function getLands() {
   return request('/lands')
 }
@@ -77,7 +77,7 @@ export async function updateLands(id, landsData) {
   });
 }
 
-// 删除图形
+// 删除土地利用数据
 export async function deleteLands(id) {
   return request(`/lands/${id}`, {
     method: 'DELETE'

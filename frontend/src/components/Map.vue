@@ -377,6 +377,7 @@ const cesiumContainer = ref(null)  // Cesium 地图容器
 let map = null
 let viewer = null;          // Cesium Viewer 实例
 let cesiumInitialized = false;   // Cesium 是否已初始化的标志
+let cesiumWatcher = null  // 保存Cesium的 watch 返回值
 let buildingDataSource = null;
 let pointEntities = [];
 let landEntities = [];
@@ -403,6 +404,8 @@ const landsForm = ref({ name: '', type: '', site_area: null })
 
 const vectorStore = useVectorStore()
 
+const iconCache = {}  // 图标缓存，避免重复创建样式
+
 let drawFeature = null
 let drawInteraction = null
 let drawLayer = null
@@ -419,8 +422,6 @@ let isFlying = false   // 飞行漫游状态
 // 教育设施供需分析相关变量
 let educationSupplyData = []          // 存储供需数据
 let analysisEntities = [];  // 存储所有分析图形
-let rippleInterval = null;   // 波纹动画定时器
-let rippleEntity = null;  // 当前波纹实体
 
 // ==================== 计算属性 ====================
 const pointsCount = computed(() => vectorStore.points.length)
@@ -574,8 +575,6 @@ async function loadCesium() {
     selectionIndicator: false,    // 选择指示器
     terrainProvider: terrainProvider,  // 使用地形数据
   })
-
-  window.debugViewer = viewer  // 暴露 viewer 供调试使用（后续删除）
   
   // 移除 Cesium 默认的logo
   viewer.cesiumWidget.creditContainer.style.display = 'none'
@@ -615,37 +614,38 @@ async function loadCesium() {
   await loadEducationSupplyData()
   // 设置点击事件
   setupCesiumClickHandler()
-  
+
+  // 监听
+  cesiumWatcher = watch(
+    () => [
+      layers.value.points.visible,
+      layers.value.points.selectedType,
+      layers.value.lands.visible,
+      layers.value.lands.selectedType
+    ],  // 监听图层显示和类型筛选的变化
+    () => {
+      if (activeBasemapId.value === '3d') {
+        loadPointsAndLands()  // 重新加载点和面
+      }
+    }
+  )
+
   cesiumInitialized = true
 }
 
-watch(
-  () => [layers.value.points.visible, layers.value.points.selectedType, 
-          layers.value.lands.visible, layers.value.lands.selectedType],
-  () => {
-    if (viewer && cesiumInitialized && activeBasemapId.value === '3d') {
-      // 重新加载点和面（会按当前配置过滤）
-      loadPointsAndLands()
-    }
-  },
-  { deep: true }
-)
 
 // 加载建筑数据的函数
 async function loadBuildings() {
   try {
     const response = await fetch('http://localhost:3000/api/buildings')
     const result = await response.json()
-    if (!result.success) throw new Error('加载建筑失败')
     
-    const geojson = result.data
-    
-    buildingDataSource = await Cesium.GeoJsonDataSource.load(geojson, {
-      stroke: Cesium.Color.WHITE,
+    buildingDataSource = await Cesium.GeoJsonDataSource.load(result.data, {
+      stroke: Cesium.Color.TRANSPARENT,
       fill: Cesium.Color.fromCssColorString('rgba(200,200,200,0.6)')
     })
     
-    // 自定义建筑颜色
+    // 自定义建筑样式和高度
     const entities = buildingDataSource.entities.values
     for (let i = 0; i < entities.length; i++) {
       const entity = entities[i]
@@ -672,7 +672,7 @@ async function loadBuildings() {
     
     viewer.dataSources.add(buildingDataSource)
   } catch (error) {
-    console.error('建筑加载失败', error)
+    console.error('加载建筑失败', error)
   }
 }
 
@@ -719,8 +719,8 @@ async function loadPointsAndLands() {
           text: point.name,
           font: '14px "Microsoft YaHei", Arial, sans-serif',
           pixelOffset: new Cesium.Cartesian2(15, -2),
-          fillColor: Cesium.Color.WHITE,
-          outlineColor: Cesium.Color.BLACK,
+          fillColor: Cesium.Color.BLACK,
+          outlineColor: Cesium.Color.WHITE,
           outlineWidth: 2,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
           verticalOrigin: Cesium.VerticalOrigin.CENTER,
@@ -742,14 +742,18 @@ async function loadPointsAndLands() {
     }
     
     filteredLands.forEach(land => {
-      const coordinates = land.geometry.coordinates[0]
-      const positions = coordinates.map(coord => Cesium.Cartesian3.fromDegrees(coord[0], coord[1]))
+      const hierarchy = new Cesium.PolygonHierarchy(
+        land.geometry.coordinates[0].map(coord => Cesium.Cartesian3.fromDegrees(coord[0], coord[1])),
+        land.geometry.coordinates.slice(1).map(ring => 
+          ring.map(coord => Cesium.Cartesian3.fromDegrees(coord[0], coord[1]))
+        )
+      )
       const entity = viewer.entities.add({
         polygon: {
-          hierarchy: new Cesium.PolygonHierarchy(positions),
+          hierarchy: hierarchy,
           material: Cesium.Color.fromCssColorString(LAND_STYLES[land.type] || 'rgba(0,0,0,0.5)'),
           outline: true,
-          outlineColor: Cesium.Color.BLACK
+          outlineColor: Cesium.Color.WHITE
         },
         properties: land
       })
@@ -771,11 +775,16 @@ async function loadEducationSupplyData() {
 
 // 获取设施点图标（根据类型返回图标 URL，可使用 emoji 转 canvas 或图片）
 function getPointIcon(type) {
+  // 如果缓存中已存在，直接返回
+  if (iconCache[type]) {
+    return iconCache[type]
+  }
+  
   // 创建 Canvas 绘制图标
   const canvas = document.createElement('canvas')
   canvas.width = 32
   canvas.height = 32
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const ctx = canvas.getContext('2d')
   
   // 绘制图标符号
   ctx.fillStyle = 'white'
@@ -811,6 +820,9 @@ function getPointIcon(type) {
   
   const icon = iconMap[type] || '📍'
   ctx.fillText(icon, 16, 16)
+
+  // 存入缓存
+  iconCache[type] = canvas
   
   return canvas
 }
@@ -824,30 +836,60 @@ function setupCesiumClickHandler() {
     // 清除之前的高亮
     if (lastHighlighted) {
       if (lastHighlighted.polygon) {
-        lastHighlighted.polygon.outlineColor = Cesium.Color.WHITE
-        lastHighlighted.polygon.material = lastHighlighted._originalMaterial
+        // 恢复原始样式（使用保存的值）
+        if (lastHighlighted._originalOutlineColor !== undefined) {
+          lastHighlighted.polygon.outlineColor = lastHighlighted._originalOutlineColor
+        }
+        if (lastHighlighted._originalOutlineWidth !== undefined) {
+          lastHighlighted.polygon.outlineWidth = lastHighlighted._originalOutlineWidth
+        }
+        if (lastHighlighted._originalMaterial) {
+          lastHighlighted.polygon.material = lastHighlighted._originalMaterial
+        }
       }
-      if (lastHighlighted.billboard) lastHighlighted.billboard.scale = 0.8
-      if (lastHighlighted.label) lastHighlighted.label.font = '14px "Microsoft YaHei", Arial, sans-serif'
+      if (lastHighlighted.billboard) {
+        lastHighlighted.billboard.scale = lastHighlighted._originalScale || 0.8
+      }
+      if (lastHighlighted.label) {
+        lastHighlighted.label.font = lastHighlighted._originalFont || '14px "Microsoft YaHei", Arial, sans-serif'
+      }
+      lastHighlighted = null
     }
-    
+
+    // 设置新的高亮
     if (Cesium.defined(pick) && pick.id) {
       const entity = pick.id
       lastHighlighted = entity
       
-      // 点要素高亮
-      if (entity.billboard) {
-        entity.billboard.scale = 1.2
-      }
-      if (entity.label) {
-        entity.label.font = '16px "Microsoft YaHei", Arial, sans-serif';  // 增大字号
-      }
-
-      // 面要素高亮
+      // 保存原始样式
       if (entity.polygon) {
-        if (!entity._originalMaterial) entity._originalMaterial = entity.polygon.material
+        // 关键修正：使用 getValue() 获取实际值
+        const currentOutlineColor = entity.polygon.outlineColor?.getValue()
+        // 如果当前有颜色值，克隆它；否则使用透明色
+        entity._originalOutlineColor = currentOutlineColor 
+          ? currentOutlineColor.clone() 
+          : Cesium.Color.TRANSPARENT.clone()
+        
+        entity._originalOutlineWidth = entity.polygon.outlineWidth?.getValue() || 1.0
+        
+        if (!entity._originalMaterial) {
+          entity._originalMaterial = entity.polygon.material
+        }
+        
+        // 设置高亮样式
         entity.polygon.material = Cesium.Color.fromCssColorString('rgba(255, 255, 255, 0.3)')
-        entity.polygon.outlineColor = Cesium.Color.BLACK
+        entity.polygon.outlineColor = Cesium.Color.WHITE
+        entity.polygon.outlineWidth = 1
+      }
+      
+      if (entity.billboard) {
+        entity._originalScale = entity.billboard.scale?.getValue() || 0.8
+        entity.billboard.scale = entity._originalScale * 1.5
+      }
+      
+      if (entity.label) {
+        entity._originalFont = entity.label.font?.getValue() || '14px "Microsoft YaHei", Arial, sans-serif'
+        entity.label.font = '16px "Microsoft YaHei", Arial, sans-serif'
       }
       
       // 显示弹窗
