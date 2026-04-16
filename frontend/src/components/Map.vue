@@ -1100,7 +1100,7 @@ function resetAnalysisState() {
   currentAnalysisIndex.value = 0
   analysisFacilities.value = []
   isFlying = false
-  viewer.scene.screenSpaceCameraController.enableInputs = true
+  viewer.scene.screenSpaceCameraController.enableInputs = true  // 恢复用户交互
 }
 
 // 显示设施的分析效果
