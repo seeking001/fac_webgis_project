@@ -52,7 +52,7 @@
         <h4>三维展示</h4>
         <div class="control-group">
           <button @click="startFlythrough" class="fly-btn">漫游飞行</button>
-          <button @click="startFlythroughAnalysis" class="fly-btn">漫游分析</button>
+          <button @click="handleAnalysisClick" class="fly-btn">{{ analysisButtonText }}</button>
         </div>
       </div>
     </div>
@@ -416,8 +416,12 @@ let Cesium = null    // 保存 Cesium 模块引用
 let cesiumPopupDiv = null  // Cesium 弹窗元素
 let cesiumPopupCloseBtn = null  // Cesium 弹窗内容元素
 let lastHighlighted = null
-let updateInterval = null
-let isFlying = false   // 飞行漫游状态
+
+// 漫游状态
+let isFlying = false   // 漫游飞行状态
+const isAnalyzing = ref(false)           // 是否处于分析模式
+const currentAnalysisIndex = ref(0)      // 当前分析到的设施索引
+const analysisFacilities = ref([])       // 待分析的设施列表
 
 // 教育设施供需分析相关变量
 let educationSupplyData = []          // 存储供需数据
@@ -427,6 +431,12 @@ let analysisEntities = [];  // 存储所有分析图形
 const pointsCount = computed(() => vectorStore.points.length)
 const landsCount = computed(() => vectorStore.lands.length)
 const getActiveBasemap = computed(() => basemaps.value.find(b => b.id === activeBasemapId.value))
+const analysisButtonText = computed(() => {
+  if (isAnalyzing.value) {
+    return `下一个 (${currentAnalysisIndex.value + 1}/${analysisFacilities.value.length})`
+  }
+  return '漫游分析'
+})
 
 // ==================== 工具函数 ====================
 function transformCoordinates(coords, fromEPSG, toEPSG, geomType) {
@@ -775,7 +785,7 @@ async function loadEducationSupplyData() {
 
 // 获取设施点图标（根据类型返回图标 URL，可使用 emoji 转 canvas 或图片）
 function getPointIcon(type) {
-  // 如果缓存中已存在，直接返回
+  // 如果缓存中已存在，直接返回（解决canvas报错问题）
   if (iconCache[type]) {
     return iconCache[type]
   }
@@ -903,7 +913,7 @@ function setupCesiumClickHandler() {
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
 }
 
-// 飞行漫游函数
+// 漫游飞行函数
 async function startFlythrough() {
   if (!viewer || isFlying) return
   isFlying = true
@@ -967,59 +977,68 @@ async function startFlythrough() {
   }
 }
 
-// 教育设施供需分析飞行漫游
-async function startFlythroughAnalysis() {
-  if (!viewer || isFlying) return;
-  isFlying = true;
-
-  clearAnalysisGraphics();  // 清理上一轮的数据残留
-  showAnalysisPanel();      // 显示分析面板
+// 漫游分析函数1 -- 教育设施供需分析 -- 按钮点击逐个分析
+async function handleAnalysisClick() {
+  if (!viewer) return
   
-  // 获取教育设施列表（已有供需数据）
-  const facilities = educationSupplyData.filter(f => 
-    ['幼儿园','小学','初中','九年一贯制学校'].includes(f.type)
-  );
-  // 选择前5个作为分析点（或按需排序）
-  const analysisPoints = facilities.slice(0, 5);
-  
-  try {
-    viewer.scene.screenSpaceCameraController.enableInputs = false;
-    
-    for (let i = 0; i < analysisPoints.length; i++) {
-      const fac = analysisPoints[i];
-      // 飞行到设施上空
-      await flyToFacility(fac);
-      
-      // 触发分析显示
-      await showAnalysisForFacility(fac);
-      
-      // 停留3秒
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // 清除分析图形
-      clearAnalysisGraphics();
-    }
-    
-    // 最后飞回整体视图
-    await new Promise((resolve) => {
-      viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(114.03, 22.58, 1800),
-        orientation: { heading: Cesium.Math.toRadians(-10), pitch: Cesium.Math.toRadians(-30), roll: 0 },
-        duration: 3,
-        complete: resolve
-      });
-      hideAnalysisPanel();  // 隐藏面板
-      clearAnalysisGraphics();  // 清空分析图形
-      // 清空面板内容
-      document.getElementById('supply-demand-content').innerHTML = '<p style="color: #aaa; text-align: center;">分析中...</p>';
-    });
-  } finally {
-    viewer.scene.screenSpaceCameraController.enableInputs = true;
-    isFlying = false;
+  if (!isAnalyzing.value) {
+    // 首次点击：开始分析
+    await startAnalysisSession()
+  } else {
+    // 分析中：下一个
+    await analyzeNextFacility()
   }
 }
 
-// 飞行到指定设施
+// 漫游分析函数2 -- 教育设施供需分析 -- 开始分析会话
+async function startAnalysisSession() {
+  // 清理旧状态
+  clearAnalysisGraphics()
+  
+  // 筛选教育设施
+  const facilities = educationSupplyData.filter(f => 
+    ['幼儿园','小学','初中','九年一贯制学校'].includes(f.type)
+  )
+  
+  if (facilities.length === 0) {
+    alert('没有可分析的教育设施')
+    return
+  }
+  
+  // 初始化状态
+  analysisFacilities.value = facilities.slice(0, 10)
+  currentAnalysisIndex.value = 0
+  isAnalyzing.value = true
+  isFlying = true
+  
+  // 显示分析面板
+  showAnalysisPanel()
+  
+  // 禁用用户交互
+  viewer.scene.screenSpaceCameraController.enableInputs = false
+  
+  try {
+    // 分析第一个设施
+    await analyzeCurrentFacility()
+  } catch (error) {
+    console.error('分析出错', error)
+    resetAnalysisState()
+  }
+}
+
+// 漫游分析函数3 -- 教育设施供需分析 -- 分析当前索引的设施
+async function analyzeCurrentFacility() {
+  const fac = analysisFacilities.value[currentAnalysisIndex.value]
+  
+  // 飞行到设施
+  await flyToFacility(fac)
+  
+  // 清除上一个设施的图形，绘制当前设施的图形
+  clearAnalysisGraphics()
+  await showAnalysisForFacility(fac)
+}
+
+// 漫游分析函数4 -- 教育设施供需分析 -- 飞行到指定设施
 function flyToFacility(fac) {
   return new Promise((resolve) => {
     viewer.camera.flyTo({
@@ -1029,10 +1048,59 @@ function flyToFacility(fac) {
         pitch: Cesium.Math.toRadians(-35),
         roll: 0
       },
-      duration: 2,
-      complete: resolve
+      duration: 1.5,
+      complete: resolve,
+      cancel: resolve
     });
   });
+}
+
+// 漫游分析函数5 -- 教育设施供需分析 -- 分析下一个设施
+async function analyzeNextFacility() {
+  const nextIndex = currentAnalysisIndex.value + 1
+  
+  if (nextIndex < analysisFacilities.value.length) {
+    // 下一个
+    currentAnalysisIndex.value = nextIndex
+    await analyzeCurrentFacility()
+  } else {
+    // 最后一个结束分析
+    await finishAnalysis()
+  }
+}
+
+// 漫游分析函数6 -- 教育设施供需分析 -- 结束分析
+async function finishAnalysis() {
+  // 飞回初始视图
+  await new Promise((resolve) => {
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(114.03, 22.58, 1800),
+      orientation: {
+        heading: Cesium.Math.toRadians(-10),
+        pitch: Cesium.Math.toRadians(-30),
+        roll: 0
+      },
+      duration: 2,
+      complete: resolve
+    })
+  })
+  
+  // 清理
+  clearAnalysisGraphics()
+  hideAnalysisPanel()
+  document.getElementById('supply-demand-content').innerHTML = 
+    '<p style="color: #aaa; text-align: center;">分析中...</p>'
+  
+  resetAnalysisState()
+}
+
+// 漫游分析函数7 -- 教育设施供需分析 -- 重置分析状态
+function resetAnalysisState() {
+  isAnalyzing.value = false
+  currentAnalysisIndex.value = 0
+  analysisFacilities.value = []
+  isFlying = false
+  viewer.scene.screenSpaceCameraController.enableInputs = true
 }
 
 // 显示设施的分析效果
@@ -1184,10 +1252,6 @@ function showCesiumPopup(properties, screenPosition) {
 function closeCesiumPopup() {
   if (cesiumPopupDiv) {
     cesiumPopupDiv.style.display = 'none'
-  }
-  if (updateInterval) {
-    clearInterval(updateInterval)
-    updateInterval = null
   }
 }
 
