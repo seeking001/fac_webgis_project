@@ -63,7 +63,7 @@
       <!-- 供需分析面板 -->
       <div class="analysis-panel"  style="display: none;">
         <h4>供需分析</h4>
-        <div id="supply-demand-content" class="analysis-content">
+        <div class="analysis-content">
           <p style="color: #aaa; text-align: center;">分析中...</p>
         </div>
       </div>
@@ -414,7 +414,7 @@ let landsModify = null
 let currentHighlightFeature = null  // 记录当前高亮的要素
 let Cesium = null    // 保存 Cesium 模块引用
 let cesiumPopupDiv = null  // Cesium 弹窗元素
-let cesiumPopupCloseBtn = null  // Cesium 弹窗内容元素
+let cesiumPopupCloseBtn = null  // Cesium 弹窗关闭按钮
 let lastHighlighted = null
 
 // 漫游状态
@@ -553,6 +553,8 @@ async function switchBasemap(basemapId) {
 function toggleRoadNet(basemap) { basemap.roadNetLayer?.setVisible(basemap.roadNetVisible) }
 function getThumbColor(id) { return { vector: '#1CAF50', satellite: '#795548', '3d': '#2196F3' }[id] || '#ccc' }
 
+// ==================== Cesium 地图操作 ====================
+
 // 动态加载 Cesium 的函数
 async function loadCesium() {
   if (cesiumInitialized) return
@@ -642,7 +644,6 @@ async function loadCesium() {
 
   cesiumInitialized = true
 }
-
 
 // 加载建筑数据的函数
 async function loadBuildings() {
@@ -1038,72 +1039,7 @@ async function analyzeCurrentFacility() {
   await showAnalysisForFacility(fac)
 }
 
-// 漫游分析函数4 -- 教育设施供需分析 -- 飞行到指定设施
-function flyToFacility(fac) {
-  return new Promise((resolve) => {
-    viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(fac.lng + 0.013, fac.lat - 0.013, 1500),
-      orientation: {
-        heading: Cesium.Math.toRadians(-45),
-        pitch: Cesium.Math.toRadians(-35),
-        roll: 0
-      },
-      duration: 1.5,
-      complete: resolve,
-      cancel: resolve
-    });
-  });
-}
-
-// 漫游分析函数5 -- 教育设施供需分析 -- 分析下一个设施
-async function analyzeNextFacility() {
-  const nextIndex = currentAnalysisIndex.value + 1
-  
-  if (nextIndex < analysisFacilities.value.length) {
-    // 下一个
-    currentAnalysisIndex.value = nextIndex
-    await analyzeCurrentFacility()
-  } else {
-    // 最后一个结束分析
-    await finishAnalysis()
-  }
-}
-
-// 漫游分析函数6 -- 教育设施供需分析 -- 结束分析
-async function finishAnalysis() {
-  // 飞回初始视图
-  await new Promise((resolve) => {
-    viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(114.03, 22.58, 1800),
-      orientation: {
-        heading: Cesium.Math.toRadians(-10),
-        pitch: Cesium.Math.toRadians(-30),
-        roll: 0
-      },
-      duration: 2,
-      complete: resolve
-    })
-  })
-  
-  // 清理
-  clearAnalysisGraphics()
-  hideAnalysisPanel()
-  document.getElementById('supply-demand-content').innerHTML = 
-    '<p style="color: #aaa; text-align: center;">分析中...</p>'
-  
-  resetAnalysisState()
-}
-
-// 漫游分析函数7 -- 教育设施供需分析 -- 重置分析状态
-function resetAnalysisState() {
-  isAnalyzing.value = false
-  currentAnalysisIndex.value = 0
-  analysisFacilities.value = []
-  isFlying = false
-  viewer.scene.screenSpaceCameraController.enableInputs = true  // 恢复用户交互
-}
-
-// 显示设施的分析效果
+// 漫游分析函数4 -- 教育设施供需分析 -- 显示设施的分析效果
 async function showAnalysisForFacility(fac) {
   clearAnalysisGraphics();
   
@@ -1115,9 +1051,9 @@ async function showAnalysisForFacility(fac) {
   else if (fac.type === '九年一贯制学校') radius = 1000;
 
   // 计算柱体高度
-  const minHeight = 30;
+  const minHeight = 0;
   const maxHeight = 600;
-  const minScale = 300;
+  const minScale = 0;
   const maxScale = 6000;
   
   let actualHeight = minHeight + (fac.scale - minScale) / (maxScale - minScale) * (maxHeight - minHeight);
@@ -1135,9 +1071,6 @@ async function showAnalysisForFacility(fac) {
   
   // 获取需求学位数
   let demandScale = fac.demand;
-  if (fac.type === '九年一贯制学校') {
-    demandScale = fac.demand;  // 总需求
-  }
   
   // 绘制双色柱
   drawDualColorColumn(
@@ -1154,9 +1087,221 @@ async function showAnalysisForFacility(fac) {
   showSupplyDemandPanel(fac);
 }
 
-// 显示供需仪表盘
+// 漫游分析函数5 -- 教育设施供需分析 -- 绘制双色柱
+function drawDualColorColumn(lng, lat, actualHeight, demandHeight, actualScale, demandScale, name) {
+  const splitAngle = -35 * Math.PI / 180;  // 分割角度（-35度，向右倾斜）
+  const gap = 5;  // 间距（米）
+  const gapOffset = gap / 2 / 111000;  // 转换为经纬度偏移（约 0.0000135）
+  
+  // 绿色半圆柱向左偏移
+  const greenLng = lng - gapOffset;
+  const greenLat = lat - gapOffset;
+  
+  // 红色半圆柱向右偏移
+  const redLng = lng + gapOffset;
+  const redLat = lat + gapOffset;
+  
+  // 绿色半圆柱（供给）
+  const supplyColumn = drawHalfCylinder(greenLng, greenLat, actualHeight, '#4caf50', splitAngle - Math.PI, splitAngle);
+  
+  // 红色半圆柱（需求）
+  const demandColumn = drawHalfCylinder(redLng, redLat, demandHeight, '#f44336', splitAngle, splitAngle + Math.PI);
+  
+  const horizontalOffset = 5;  // 左右偏移 5 米
+  const lngOffset = horizontalOffset / 111000;
+  // 供给标签（绿色，位于绿色柱一侧，偏左）
+  const supplyLabel = viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(lng - lngOffset, lat, actualHeight + 30),
+    label: {
+      text: `${actualScale}`,
+      font: 'bold 16px "Microsoft YaHei", sans-serif',
+      fillColor: Cesium.Color.fromCssColorString('#4caf50'),
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 2,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      horizontalOrigin: Cesium.HorizontalOrigin.RIGHT,
+      pixelOffset: new Cesium.Cartesian2(-5, 0),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY
+    }
+  });
+  
+  // 需求标签（红色，位于红色柱一侧，偏右）
+  const demandLabel = viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(lng + lngOffset, lat, demandHeight + 30),
+    label: {
+      text: `${demandScale}`,
+      font: 'bold 16px "Microsoft YaHei", sans-serif',
+      fillColor: Cesium.Color.fromCssColorString('#f44336'),
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 2,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+      pixelOffset: new Cesium.Cartesian2(5, 0),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY
+    }
+  });
+  
+  analysisEntities.push(supplyColumn, demandColumn, supplyLabel, demandLabel);
+}
+
+// 漫游分析函数6 -- 教育设施供需分析 -- 绘制半圆柱体
+function drawHalfCylinder(lng, lat, height, color, startAngle, endAngle) {
+  const radius = 30;  // 半径（米）
+  const segments = 20; // 分段数
+  const positions = [];
+  
+  // 生成指定角度范围内的圆弧点
+  for (let i = 0; i <= segments; i++) {
+    const angle = startAngle + (endAngle - startAngle) * i / segments;
+    const dx = radius * Math.cos(angle);
+    const dy = radius * Math.sin(angle);
+    const offsetLng = dx / 111000;
+    const offsetLat = dy / 111000;
+    positions.push([lng + offsetLng, lat + offsetLat]);
+  }
+  
+  // 添加圆心点（使形状为扇形）
+  positions.unshift([lng, lat]);
+  
+  const polygon = viewer.entities.add({
+    polygon: {
+      hierarchy: Cesium.Cartesian3.fromDegreesArray(
+        positions.flatMap(p => [p[0], p[1]])
+      ),
+      extrudedHeight: height,
+      material: Cesium.Color.fromCssColorString(color).withAlpha(0.6),
+      // outline: true,
+      // outlineColor: Cesium.Color.WHITE,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      extrudedHeightReference: Cesium.HeightReference.RELATIVE_TO_GROUND
+    }
+  });
+  return polygon;
+}
+
+// 漫游分析函数7 -- 教育设施供需分析 -- 绘制服务半径圆盘（动态波纹效果）
+function drawServiceRadius(lng, lat, maxRadius, color) {
+  if (!maxRadius || isNaN(maxRadius) || maxRadius <= 0) {
+    console.warn('drawServiceRadius: 无效的半径', maxRadius);
+    return;
+  }
+  
+  const MIN_RADIUS = 1;
+  
+  // 静态底圆（淡色背景）
+  const baseEllipse = viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+    ellipse: {
+      semiMajorAxis: Math.max(MIN_RADIUS, maxRadius),
+      semiMinorAxis: Math.max(MIN_RADIUS, maxRadius),
+      material: Cesium.Color.fromCssColorString(color).withAlpha(0.2),
+      outline: false,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+    }
+  });
+  analysisEntities.push(baseEllipse);
+  
+  // 存储波纹对象
+  const waves = [];
+  let waveId = 0;
+  
+  // 创建单个波纹
+  function createWave() {
+    const id = waveId++;
+    const wave = {
+      id: id,
+      radius: 0,
+      alpha: 0.6,
+      active: true,
+      entity: null
+    };
+    
+    // 创建椭圆实体
+    wave.entity = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(lng, lat, 0.1),
+      ellipse: {
+        semiMajorAxis: 0,
+        semiMinorAxis: 0,
+        material: Cesium.Color.fromCssColorString(color).withAlpha(0.6),
+        outline: true,
+        outlineColor: Cesium.Color.fromCssColorString(color),
+        outlineWidth: 3,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+      }
+    });
+    analysisEntities.push(wave.entity);
+    waves.push(wave);
+    return wave;
+  }
+  
+  // 移除波纹
+  function removeWave(wave) {
+    if (wave.entity && viewer.entities.contains(wave.entity)) {
+      viewer.entities.remove(wave.entity);
+    }
+    wave.active = false;
+  }
+  
+  let lastCreateTime = 0;
+  
+  const interval = setInterval(() => {
+    const now = Date.now();
+    
+    // 每隔 500ms 创建一个新波纹（控制频率）
+    if (now - lastCreateTime > 500) {
+      createWave();
+      lastCreateTime = now;
+    }
+    
+    // 更新所有波纹
+    for (let i = waves.length - 1; i >= 0; i--) {
+      const wave = waves[i];
+      if (!wave.active) {
+        waves.splice(i, 1);
+        continue;
+      }
+      
+      // 半径扩大（速度 30 米/帧）
+      wave.radius += 30;
+      
+      // 透明度衰减
+      wave.alpha = 0.5 * (1 - wave.radius / maxRadius);
+      
+      // 边框宽度随半径增加而变细
+      const width = Math.max(1, 3 - (wave.radius / maxRadius) * 30);
+      
+      // 超出最大半径则移除
+      if (wave.radius >= maxRadius) {
+        removeWave(wave);
+        continue;
+      }
+      
+      // 确保半径有效
+      const currentRadius = Math.max(MIN_RADIUS, wave.radius);
+      
+      try {
+        wave.entity.ellipse.semiMajorAxis = currentRadius;
+        wave.entity.ellipse.semiMinorAxis = currentRadius;
+        wave.entity.ellipse.material = Cesium.Color.fromCssColorString(color).withAlpha(wave.alpha);
+        wave.entity.ellipse.outlineWidth = width;
+        wave.entity.ellipse.outlineColor = Cesium.Color.fromCssColorString(color).withAlpha(wave.alpha);
+      } catch (e) {
+        removeWave(wave);
+      }
+    }
+  }, 80);
+  
+  if (!window.rippleIntervals) window.rippleIntervals = [];
+  window.rippleIntervals.push(interval);
+}
+
+// 漫游分析函数8 -- 教育设施供需分析 -- 供需分析面板
 function showSupplyDemandPanel(fac) {
-  const container = document.getElementById('supply-demand-content');
+  const container = document.querySelector('.analysis-content');
   if (!container) return;
   
   let html = '';
@@ -1182,12 +1327,93 @@ function showSupplyDemandPanel(fac) {
     
     let statusText = '';
     if (fac.status === 'sufficient') statusText = '充足 ✅';
-    else if (fac.status === 'balanced') statusText = '基本平衡 ⚠️';
+    else if (fac.status === 'balanced') statusText = '平衡 ⚠️';
     else if (fac.status === 'insufficient') statusText = '不足 ❌';
-    html += `<p><strong>评价：</strong> ${statusText}</p>`;
+    html += `<p><strong>供需评价：</strong> ${statusText}</p>`;
   }
   
   container.innerHTML = html;
+}
+
+// 漫游分析函数9 -- 教育设施供需分析 -- 飞行到指定设施
+function flyToFacility(fac) {
+  return new Promise((resolve) => {
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(fac.lng + 0.013, fac.lat - 0.013, 1500),
+      orientation: {
+        heading: Cesium.Math.toRadians(-45),
+        pitch: Cesium.Math.toRadians(-35),
+        roll: 0
+      },
+      duration: 1.5,
+      complete: resolve,
+      cancel: resolve
+    });
+  });
+}
+
+// 漫游分析函数10 -- 教育设施供需分析 -- 分析下一个设施
+async function analyzeNextFacility() {
+  const nextIndex = currentAnalysisIndex.value + 1
+  
+  if (nextIndex < analysisFacilities.value.length) {
+    // 下一个
+    currentAnalysisIndex.value = nextIndex
+    await analyzeCurrentFacility()
+  } else {
+    // 最后一个结束分析
+    await finishAnalysis()
+  }
+}
+
+// 漫游分析函数11 -- 教育设施供需分析 -- 结束分析
+async function finishAnalysis() {
+  // 飞回初始视图
+  await new Promise((resolve) => {
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(114.03, 22.58, 1800),
+      orientation: {
+        heading: Cesium.Math.toRadians(-10),
+        pitch: Cesium.Math.toRadians(-30),
+        roll: 0
+      },
+      duration: 2,
+      complete: resolve
+    })
+  })
+  
+  // 清理
+  clearAnalysisGraphics()
+  hideAnalysisPanel()
+  document.querySelector('.analysis-content').innerHTML = 
+    '<p style="color: #aaa; text-align: center;">分析中...</p>'
+  
+  resetAnalysisState()
+}
+
+// 漫游分析函数12 -- 教育设施供需分析 -- 重置分析状态
+function resetAnalysisState() {
+  isAnalyzing.value = false
+  currentAnalysisIndex.value = 0
+  analysisFacilities.value = []
+  isFlying = false
+  viewer.scene.screenSpaceCameraController.enableInputs = true  // 恢复用户交互
+}
+
+// 漫游分析函数13 -- 教育设施供需分析 -- 清除分析图形和停止动画
+function clearAnalysisGraphics() {
+  // 清理所有波纹动画
+  if (window.rippleIntervals) {
+    window.rippleIntervals.forEach(interval => clearInterval(interval));
+    window.rippleIntervals = [];
+  }
+  
+  for (const entity of analysisEntities) {
+    if (entity && viewer.entities.contains(entity)) {
+      viewer.entities.remove(entity);
+    }
+  }
+  analysisEntities = [];
 }
 
 // 显示供需分析面板
@@ -1202,7 +1428,7 @@ function hideAnalysisPanel() {
   if (panel) panel.style.display = 'none';
 }
 
-// 显示三维弹窗
+// 显示三维地图弹窗
 function showCesiumPopup(properties, screenPosition) {
   if (!cesiumPopupDiv) {
     cesiumPopupDiv = document.createElement('div');
@@ -1245,223 +1471,17 @@ function showCesiumPopup(properties, screenPosition) {
   
   // 设置弹窗位置（使用 screenPosition）
   cesiumPopupDiv.style.left = `${screenPosition.x + 15}px`
-  cesiumPopupDiv.style.top = `${screenPosition.y - 10}px`
+  cesiumPopupDiv.style.top = `${screenPosition.y}px`
 }
 
-// 关闭弹窗
+// 关闭三维地图弹窗
 function closeCesiumPopup() {
   if (cesiumPopupDiv) {
     cesiumPopupDiv.style.display = 'none'
   }
 }
 
-// ==================== 图层操作 ====================
-// 教育设施供需分析---绘制圆柱体(双色柱+目标线)
-function drawHalfCylinder(lng, lat, height, color, startAngle, endAngle) {
-  const radius = 50;  // 半径（米）
-  const segments = 20; // 分段数
-  const positions = [];
-  
-  // 生成指定角度范围内的圆弧点
-  for (let i = 0; i <= segments; i++) {
-    const angle = startAngle + (endAngle - startAngle) * i / segments;
-    const dx = radius * Math.cos(angle);
-    const dy = radius * Math.sin(angle);
-    const offsetLng = dx / 111000;
-    const offsetLat = dy / 111000;
-    positions.push([lng + offsetLng, lat + offsetLat]);
-  }
-  
-  // 添加圆心点（使形状为扇形）
-  positions.unshift([lng, lat]);
-  
-  const polygon = viewer.entities.add({
-    polygon: {
-      hierarchy: Cesium.Cartesian3.fromDegreesArray(
-        positions.flatMap(p => [p[0], p[1]])
-      ),
-      extrudedHeight: height,
-      material: Cesium.Color.fromCssColorString(color).withAlpha(0.6),
-      // outline: true,
-      // outlineColor: Cesium.Color.WHITE,
-      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-      extrudedHeightReference: Cesium.HeightReference.RELATIVE_TO_GROUND
-    }
-  });
-  return polygon;
-}
-
-function drawDualColorColumn(lng, lat, actualHeight, demandHeight, actualScale, demandScale, name) {
-  const splitAngle = -35 * Math.PI / 180;
-  const gap = 3;  // 间距（米）
-  const gapOffset = gap / 2 / 111000;  // 转换为经纬度偏移（约 0.0000135）
-  
-  // 绿色半圆柱向左偏移
-  const greenLng = lng - gapOffset;
-  const greenLat = lat - gapOffset;
-  
-  // 红色半圆柱向右偏移
-  const redLng = lng + gapOffset;
-  const redLat = lat + gapOffset;
-  
-  // 绿色半圆柱（供给）
-  const supplyColumn = drawHalfCylinder(greenLng, greenLat, actualHeight, '#4caf50', splitAngle - Math.PI, splitAngle);
-  
-  // 红色半圆柱（需求）
-  const demandColumn = drawHalfCylinder(redLng, redLat, demandHeight, '#f44336', splitAngle, splitAngle + Math.PI);
-  
-  // 顶部标签（保持在中心位置）
-  const maxHeight = Math.max(actualHeight, demandHeight);
-  const label = viewer.entities.add({
-    position: Cesium.Cartesian3.fromDegrees(lng, lat, maxHeight + 15),
-    label: {
-      text: `${name}\n${actualScale} / ${demandScale}`,
-      font: '12px "Microsoft YaHei", sans-serif',
-      fillColor: Cesium.Color.WHITE,
-      outlineColor: Cesium.Color.BLACK,
-      outlineWidth: 2,
-      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-      heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-      verticalOrigin: Cesium.VerticalOrigin.BOTTOM
-    }
-  });
-  
-  analysisEntities.push(supplyColumn, demandColumn, label);
-}
-
-// 教育设施供需分析---绘制服务半径圆盘（动态波纹效果）
-function drawServiceRadius(lng, lat, maxRadius, color) {
-  if (!maxRadius || isNaN(maxRadius) || maxRadius <= 0) {
-    console.warn('drawServiceRadius: 无效的半径', maxRadius);
-    return;
-  }
-  
-  const MIN_RADIUS = 1;
-  
-  // 静态底圆（淡色背景）
-  const baseEllipse = viewer.entities.add({
-    position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
-    ellipse: {
-      semiMajorAxis: Math.max(MIN_RADIUS, maxRadius),
-      semiMinorAxis: Math.max(MIN_RADIUS, maxRadius),
-      material: Cesium.Color.fromCssColorString(color).withAlpha(0.2),
-      outline: false,
-      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
-    }
-  });
-  analysisEntities.push(baseEllipse);
-  
-  // 存储波纹对象
-  const waves = [];
-  let waveId = 0;
-  
-  // 创建单个波纹
-  function createWave() {
-    const id = waveId++;
-    const wave = {
-      id: id,
-      radius: 0,
-      alpha: 0.7,
-      active: true,
-      entity: null
-    };
-    
-    // 创建椭圆实体
-    wave.entity = viewer.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(lng, lat, 0.1),
-      ellipse: {
-        semiMajorAxis: 0,
-        semiMinorAxis: 0,
-        material: Cesium.Color.fromCssColorString(color).withAlpha(0.6),
-        outline: true,
-        outlineColor: Cesium.Color.fromCssColorString(color),
-        outlineWidth: 3,
-        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
-      }
-    });
-    analysisEntities.push(wave.entity);
-    waves.push(wave);
-    return wave;
-  }
-  
-  // 移除波纹
-  function removeWave(wave) {
-    if (wave.entity && viewer.entities.contains(wave.entity)) {
-      viewer.entities.remove(wave.entity);
-    }
-    wave.active = false;
-  }
-  
-  let lastCreateTime = 0;
-  
-  const interval = setInterval(() => {
-    const now = Date.now();
-    
-    // 每隔 400ms 创建一个新波纹（控制频率）
-    if (now - lastCreateTime > 500) {
-      createWave();
-      lastCreateTime = now;
-    }
-    
-    // 更新所有波纹
-    for (let i = waves.length - 1; i >= 0; i--) {
-      const wave = waves[i];
-      if (!wave.active) {
-        waves.splice(i, 1);
-        continue;
-      }
-      
-      // 半径扩大（速度 20 米/帧）
-      wave.radius += 30;
-      
-      // 透明度衰减
-      wave.alpha = 0.5 * (1 - wave.radius / maxRadius);
-      
-      // 边框宽度随半径增加而变细
-      const width = Math.max(1, 3 - (wave.radius / maxRadius) * 30);
-      
-      // 超出最大半径则移除
-      if (wave.radius >= maxRadius) {
-        removeWave(wave);
-        continue;
-      }
-      
-      // 确保半径有效
-      const currentRadius = Math.max(MIN_RADIUS, wave.radius);
-      
-      try {
-        wave.entity.ellipse.semiMajorAxis = currentRadius;
-        wave.entity.ellipse.semiMinorAxis = currentRadius;
-        wave.entity.ellipse.material = Cesium.Color.fromCssColorString(color).withAlpha(wave.alpha);
-        wave.entity.ellipse.outlineWidth = width;
-        wave.entity.ellipse.outlineColor = Cesium.Color.fromCssColorString(color).withAlpha(wave.alpha);
-      } catch (e) {
-        removeWave(wave);
-      }
-    }
-  }, 80);
-  
-  if (!window.rippleIntervals) window.rippleIntervals = [];
-  window.rippleIntervals.push(interval);
-}
-
-// 教育设施供需分析---清除当前分析图形和停止动画
-function clearAnalysisGraphics() {
-  // 清理所有波纹动画
-  if (window.rippleIntervals) {
-    window.rippleIntervals.forEach(interval => clearInterval(interval));
-    window.rippleIntervals = [];
-  }
-  
-  for (const entity of analysisEntities) {
-    if (entity && viewer.entities.contains(entity)) {
-      viewer.entities.remove(entity);
-    }
-  }
-  analysisEntities = [];
-}
-
-// ==================== 图层操作 ====================
+// ==================== openlayers图层操作 ====================
 async function toggleLayer(layerKey) {
   const layerObj = layers.value[layerKey]
   if (layerObj.visible && !layerObj.loaded) {
