@@ -1,5 +1,4 @@
 // 引入相关模块
-import { ref } from 'vue';
 import { toLonLat, fromLonLat } from 'ol/proj';
 import { Polygon } from 'ol/geom';
 import VectorLayer from 'ol/layer/Vector';
@@ -8,31 +7,14 @@ import { Style, Fill, Stroke, Circle } from 'ol/style';
 import { Draw } from 'ol/interaction';
 import { proj4, transformCoordinates, calculateAreaInEPSG4547 } from '@/utils/coordinate';
 import { createPoints, updatePoints, deletePoints, createLands, updateLands, deleteLands } from '@/services/api';
+import { useVectorStore } from '@/stores/vectorStore';
 
-export function useFeature(map, layers, vectorStore, updateVectorLayer, pointModify, landsModify, currentHighlightFeatureRef, closePopupCallback) {
-  const selectedFeature = ref(null)
-  const popupPosition = ref(null)
-  const showPointForm = ref(false)
-  const showLandsForm = ref(false)
-  const isDrawing = ref(false)
-  const isEditing = ref(false)
-  const originalGeometry = ref(null)
-
-  const importLayerType = ref(null)
-  const importFeatures = ref([])
-
-  const pointsForm = ref({ name: '', level: '', type: '', floor_area: null, scale: null })
-  const landsForm = ref({ name: '', type: '', site_area: null })
-
-  const drawHandlers = { backspace: null, esc: null }
-  let drawFeature = null
-  let drawInteraction = null
-  let drawLayer = null
+export function useFeature(map, layers, updateVectorLayer, getPointModify, getLandsModify, clearHighlight) {
+  const vectorStore = useVectorStore()
 
   // ==================== 工具函数 ====================
   function resetForms() {
-    pointsForm.value = { name: '', level: '', type: '', floor_area: null, scale: null }
-    landsForm.value = { name: '', type: '', site_area: null }
+    vectorStore.resetForms()
   }
 
   function calcArea() {
@@ -43,16 +25,16 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
       if (type === 'Polygon') coordinates4326 = coordinates
     }
 
-    if (!coordinates4326 && selectedFeature.value?.layerType === 'lands') {
+    if (!coordinates4326 && vectorStore.selectedFeature?.layerType === 'lands') {
       const source = layers.value.lands.layer?.getSource()
-      const mapFeature = source?.getFeatures().find(f => f.get('id') === selectedFeature.value.id)
+      const mapFeature = source?.getFeatures().find(f => f.get('id') === vectorStore.selectedFeature.id)
       if (mapFeature?.getGeometry()) {
         coordinates4326 = mapFeature.getGeometry().getCoordinates().map(ring => ring.map(coord => toLonLat(coord)))
       }
     }
 
-    if (!coordinates4326 && drawFeature) {
-      const geom = drawFeature.getGeometry()
+    if (!coordinates4326 && vectorStore.drawFeature) {
+      const geom = vectorStore.drawFeature.getGeometry()
       if (geom?.getType() === 'Polygon') {
         coordinates4326 = geom.getCoordinates().map(ring => ring.map(coord => toLonLat(coord)))
       }
@@ -63,65 +45,115 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
       return
     }
 
-    landsForm.value.site_area = Math.round(calculateAreaInEPSG4547(coordinates4326))
+    vectorStore.updateLandsForm({ site_area: Math.round(calculateAreaInEPSG4547(coordinates4326)) })
   }
 
   // ==================== 图形绘制 ====================
 
   // 开始绘制新要素
-  function startDrawing(layerKey) { resetForms(); layerKey === 'points' ? pointDraw() : landsDraw() }
+  function startDrawing(layerKey) {
+    resetForms();
+    layerKey === 'points' ? pointDraw() : landsDraw()
+  }
 
   // 设施点绘制函数
   function pointDraw() {
-    if (drawInteraction) map.removeInteraction(drawInteraction)
-    isDrawing.value = true
+    const currentInteraction = vectorStore.drawInteraction
+    if (currentInteraction) map.value.removeInteraction(currentInteraction)
+    vectorStore.setIsDrawing(true)
 
     const source = new VectorSource()
-    drawLayer = new VectorLayer({ source, style: new Style({ image: new Circle({ radius: 4, fill: new Fill({ color: 'purple' }) }) }) })
-    map.addLayer(drawLayer)
+    const drawLayer = new VectorLayer({
+      source,
+      style: new Style({ image: new Circle({ radius: 4, fill: new Fill({ color: 'purple' }) }) })
+    })
+    map.value.addLayer(drawLayer)
+    vectorStore.setDrawLayer(drawLayer)
 
-    drawInteraction = new Draw({ source, type: 'Point', style: new Style({ image: new Circle({ radius: 4, fill: new Fill({ color: 'purple' }) }) }) })
-    drawInteraction.on('drawend', (event) => { drawFeature = event.feature; showPointForm.value = true })
-    map.addInteraction(drawInteraction)
+    const drawInteraction = new Draw({
+      source,
+      type: 'Point',
+      style: new Style({ image: new Circle({ radius: 4, fill: new Fill({ color: 'purple' }) }) })
+    })
+    drawInteraction.on('drawend', (event) => {
+      vectorStore.setDrawFeature(event.feature)
+      vectorStore.setShowPointForm(true)
+    })
+    map.value.addInteraction(drawInteraction)
+    vectorStore.setDrawInteraction(drawInteraction)
 
-    const escHandler = (e) => { if (e.key === 'Escape' && isDrawing.value) { cancelDraw(); document.removeEventListener('keydown', escHandler) } }
+    const escHandler = (e) => {
+      if (e.key === 'Escape' && vectorStore.isDrawing) {
+        cancelDraw();
+        document.removeEventListener('keydown', escHandler)
+      }
+    }
     document.addEventListener('keydown', escHandler)
+    vectorStore.setDrawHandler('esc', escHandler)
   }
 
   // 设施用地绘制函数
   function landsDraw() {
-    if (drawInteraction) map.removeInteraction(drawInteraction)
-    isDrawing.value = true
+    const currentInteraction = vectorStore.drawInteraction
+    if (currentInteraction) map.value.removeInteraction(currentInteraction)
+    vectorStore.setIsDrawing(true)
 
     const source = new VectorSource()
-    drawLayer = new VectorLayer({ source, style: new Style({ fill: new Fill({ color: 'rgba(50, 0, 100, 0.3)' }), stroke: new Stroke({ color: 'purple', width: 1.5 }) }) })
-    map.addLayer(drawLayer)
+    const drawLayer = new VectorLayer({
+      source,
+      style: new Style({
+        fill: new Fill({ color: 'rgba(50, 0, 100, 0.3)' }),
+        stroke: new Stroke({ color: 'purple', width: 1.5 })
+      })
+    })
+    map.value.addLayer(drawLayer)
+    vectorStore.setDrawLayer(drawLayer)
 
-    drawInteraction = new Draw({ source, type: 'Polygon', style: new Style({ fill: new Fill({ color: 'rgba(50, 0, 100, 0.3)' }), stroke: new Stroke({ color: 'purple', width: 1.5 }) }) })
-    drawInteraction.on('drawend', (event) => { drawFeature = event.feature; showLandsForm.value = true; removeBackspaceListener() })
-    map.addInteraction(drawInteraction)
+    const drawInteraction = new Draw({
+      source,
+      type: 'Polygon',
+      style: new Style({
+        fill: new Fill({ color: 'rgba(50, 0, 100, 0.3)' }),
+        stroke: new Stroke({ color: 'purple', width: 1.5 })
+      })
+    })
+    drawInteraction.on('drawend', (event) => {
+      vectorStore.setDrawFeature(event.feature)
+      vectorStore.setShowLandsForm(true)
+      removeBackspaceListener()
+    })
+    map.value.addInteraction(drawInteraction)
+    vectorStore.setDrawInteraction(drawInteraction)
 
-    const backspaceHandler = (e) => { if (e.key === 'Backspace' && isDrawing.value) { e.preventDefault(); drawInteraction?.removeLastPoint?.() } }
-    const escHandler = (e) => { if (e.key === 'Escape' && isDrawing.value) cancelDraw() }
+    const backspaceHandler = (e) => {
+      if (e.key === 'Backspace' && vectorStore.isDrawing) {
+        e.preventDefault();
+        drawInteraction?.removeLastPoint?.()
+      }
+    }
+    const escHandler = (e) => {
+      if (e.key === 'Escape' && vectorStore.isDrawing) cancelDraw()
+    }
     document.addEventListener('keydown', backspaceHandler)
     document.addEventListener('keydown', escHandler)
-    drawHandlers.backspace = backspaceHandler
-    drawHandlers.esc = escHandler
+    vectorStore.setDrawHandler('backspace', backspaceHandler)
+    vectorStore.setDrawHandler('esc', escHandler)
   }
 
   // 键盘退格绘制函数
   function removeBackspaceListener() {
-    if (drawHandlers.backspace) {
-      document.removeEventListener('keydown', drawHandlers.backspace)
-      drawHandlers.backspace = null
+    const handlers = vectorStore.drawHandlers
+    if (handlers.backspace) {
+      document.removeEventListener('keydown', handlers.backspace)
+      vectorStore.setDrawHandler('backspace', null)
     }
   }
 
   // 取消绘制
   function cancelDraw() {
     if (window._tempImportGeometry && window._resolveImport) {
-      showLandsForm.value = false
-      showPointForm.value = false
+      vectorStore.setShowLandsForm(false)
+      vectorStore.setShowPointForm(false)
       const resolve = window._resolveImport
       delete window._tempImportGeometry
       delete window._resolveImport
@@ -129,18 +161,28 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
       return
     }
 
-    showLandsForm.value = false
-    showPointForm.value = false
+    vectorStore.setShowLandsForm(false)
+    vectorStore.setShowPointForm(false)
     resetForms()
-    drawFeature = null
-    isDrawing.value = false
+    vectorStore.setDrawFeature(null)
+    vectorStore.setIsDrawing(false)
 
-    Object.entries(drawHandlers).forEach(([key, handler]) => {
-      if (handler) { document.removeEventListener('keydown', handler); drawHandlers[key] = null }
+    const handlers = vectorStore.drawHandlers
+    Object.entries(handlers).forEach(([key, handler]) => {
+      if (handler) {
+        document.removeEventListener('keydown', handler)
+        vectorStore.setDrawHandler(key, null)
+      }
     })
 
-    if (drawInteraction) { map.removeInteraction(drawInteraction); drawInteraction = null }
-    if (drawLayer) { map.removeLayer(drawLayer); drawLayer = null }
+    if (vectorStore.drawInteraction) {
+      map.value.removeInteraction(vectorStore.drawInteraction)
+      vectorStore.setDrawInteraction(null)
+    }
+    if (vectorStore.drawLayer) {
+      map.value.removeLayer(vectorStore.drawLayer)
+      vectorStore.setDrawLayer(null)
+    }
   }
 
   // ==================== 图形编辑 ====================
@@ -149,14 +191,14 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
     const layerObj = layers.value[feature.layerType]
     if (!layerObj?.loaded) return
 
-    if (!isEditing.value) {
-      isEditing.value = true
+    if (!vectorStore.isEditing) {
+      vectorStore.setIsEditing(true)
       const source = layerObj.layer.getSource()
       const mapFeature = source?.getFeatures().find(f => f.get('id') === feature.id)
       if (mapFeature) {
-        originalGeometry.value = mapFeature.getGeometry().clone()
-        const modify = feature.layerType === 'points' ? pointModify : landsModify
-        modify.setActive(true)
+        vectorStore.setOriginalGeometry(mapFeature.getGeometry().clone())
+        const modify = feature.layerType === 'points' ? getPointModify() : getLandsModify()
+        if (modify) modify.setActive(true)
       }
     } else {
       openEditForm(feature)
@@ -164,44 +206,53 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
   }
 
   function exitEditMode() {
-    // 清除高亮
-    if (currentHighlightFeature) {
-      currentHighlightFeature.setStyle(null)
-      currentHighlightFeature = null
-    }
+    if (clearHighlight) clearHighlight()
 
-    if (originalGeometry.value && selectedFeature.value) {
-      const layerObj = layers.value[selectedFeature.value.layerType]
+    if (vectorStore.originalGeometry && vectorStore.selectedFeature) {
+      const layerObj = layers.value[vectorStore.selectedFeature.layerType]
       const source = layerObj.layer.getSource()
-      const mapFeature = source.getFeatures().find(f => f.get('id') === selectedFeature.value.id)
-      if (mapFeature) mapFeature.setGeometry(originalGeometry.value.clone())
-      originalGeometry.value = null
+      const mapFeature = source.getFeatures().find(f => f.get('id') === vectorStore.selectedFeature.id)
+      if (mapFeature) mapFeature.setGeometry(vectorStore.originalGeometry.clone())
+      vectorStore.setOriginalGeometry(null)
     }
+    const pointModify = getPointModify()
+    const landsModify = getLandsModify()
     if (pointModify) pointModify.setActive(false)
     if (landsModify) landsModify.setActive(false)
-    isEditing.value = false
+    vectorStore.setIsEditing(false)
   }
 
   function openEditForm(feature) {
     if (feature.layerType === 'points') {
-      pointsForm.value = { name: feature.name || '', level: feature.level || '', type: feature.type || '', floor_area: feature.floor_area || null, scale: feature.scale || null }
-      showPointForm.value = true
+      vectorStore.updatePointsForm({
+        name: feature.name || '',
+        level: feature.level || '',
+        type: feature.type || '',
+        floor_area: feature.floor_area || null,
+        scale: feature.scale || null
+      })
+      vectorStore.setShowPointForm(true)
     } else {
-      landsForm.value = { name: feature.name || '', type: feature.type || '', site_area: feature.site_area || null }
-      showLandsForm.value = true
+      vectorStore.updateLandsForm({
+        name: feature.name || '',
+        type: feature.type || '',
+        site_area: feature.site_area || null
+      })
+      vectorStore.setShowLandsForm(true)
     }
   }
 
   // ==================== 数据保存 ====================
   async function savePointToDatabase() {
     try {
-      if (!pointsForm.value.name) return
+      const form = vectorStore.pointsForm
+      if (!form.name) return
 
       if (window._tempImportGeometry) {
         const { type, coordinates, layerType } = window._tempImportGeometry
         const response = await createPoints({
-          name: pointsForm.value.name, level: pointsForm.value.level, type: pointsForm.value.type,
-          floor_area: pointsForm.value.floor_area || 0, scale: pointsForm.value.scale || 0,
+          name: form.name, level: form.level, type: form.type,
+          floor_area: form.floor_area || 0, scale: form.scale || 0,
           geometry: { type, coordinates: type === 'Point' ? [Number(coordinates[0]), Number(coordinates[1])] : coordinates }
         })
         if (response.success) {
@@ -210,64 +261,67 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
             await vectorStore.loadPoints()
             updateVectorLayer(layerType)
           }
-          showPointForm.value = false
+          vectorStore.setShowPointForm(false)
           if (window._resolveImport) window._resolveImport()
         }
         return
       }
 
-      if (selectedFeature.value?.id) {
-        const id = selectedFeature.value.id
+      if (vectorStore.selectedFeature?.id) {
+        const id = vectorStore.selectedFeature.id
         const source = layers.value.points.layer?.getSource()
         const feature = source?.getFeatures().find(f => f.get('id') === id)
-        let geometry = selectedFeature.value.geometry
+        let geometry = vectorStore.selectedFeature.geometry
         if (feature) geometry = { type: 'Point', coordinates: toLonLat(feature.getGeometry().getCoordinates()) }
 
-        const updateData = { name: pointsForm.value.name, level: pointsForm.value.level, type: pointsForm.value.type, floor_area: pointsForm.value.floor_area || 0, scale: pointsForm.value.scale || 0, geometry }
+        const updateData = {
+          name: form.name, level: form.level, type: form.type,
+          floor_area: form.floor_area || 0, scale: form.scale || 0, geometry
+        }
         const response = await updatePoints(id, updateData)
         if (response.success) {
           if (feature) {
             feature.setGeometry(feature.getGeometry().clone())
-            feature.set('name', pointsForm.value.name)
-            feature.set('level', pointsForm.value.level)
-            feature.set('type', pointsForm.value.type)
-            feature.set('floor_area', pointsForm.value.floor_area)
-            feature.set('scale', pointsForm.value.scale)
+            feature.set('name', form.name)
+            feature.set('level', form.level)
+            feature.set('type', form.type)
+            feature.set('floor_area', form.floor_area)
+            feature.set('scale', form.scale)
           }
           const index = vectorStore.points.findIndex(p => p.id === id)
           if (index !== -1) vectorStore.points[index] = { ...vectorStore.points[index], ...updateData, id }
-          selectedFeature.value = { ...selectedFeature.value, ...updateData, id }
+          vectorStore.selectedFeature = { ...vectorStore.selectedFeature, ...updateData, id }
 
           alert('更新成功！')
 
-          pointModify.setActive(false)
-          selectedFeature.value = null
-          popupPosition.value = null
-          isEditing.value = false
-          originalGeometry.value = null
-          showPointForm.value = false
+          const pointModify = getPointModify()
+          if (pointModify) pointModify.setActive(false)
+          vectorStore.selectedFeature = null
+          vectorStore.popupPosition = null
+          vectorStore.setIsEditing(false)
+          vectorStore.setOriginalGeometry(null)
+          vectorStore.setShowPointForm(false)
         }
       } else {
-        if (!drawFeature) return
+        if (!vectorStore.drawFeature) return
         const response = await createPoints({
-          name: pointsForm.value.name, level: pointsForm.value.level, type: pointsForm.value.type,
-          floor_area: pointsForm.value.floor_area || 0, scale: pointsForm.value.scale || 0,
-          geometry: { type: 'Point', coordinates: toLonLat(drawFeature.getGeometry().getCoordinates()) }
+          name: form.name, level: form.level, type: form.type,
+          floor_area: form.floor_area || 0, scale: form.scale || 0,
+          geometry: { type: 'Point', coordinates: toLonLat(vectorStore.drawFeature.getGeometry().getCoordinates()) }
         })
         if (response.success) {
-          const newFeature = drawFeature.clone()
+          const newFeature = vectorStore.drawFeature.clone()
           newFeature.set('id', response.data.id)
-          newFeature.set('name', pointsForm.value.name)
-          newFeature.set('level', pointsForm.value.level)
-          newFeature.set('type', pointsForm.value.type)
-          newFeature.set('floor_area', pointsForm.value.floor_area)
-          newFeature.set('scale', pointsForm.value.scale)
+          newFeature.set('name', form.name)
+          newFeature.set('level', form.level)
+          newFeature.set('type', form.type)
+          newFeature.set('floor_area', form.floor_area)
+          newFeature.set('scale', form.scale)
           newFeature.set('layerType', 'points')
           layers.value.points.layer?.getSource()?.addFeature(newFeature)
           vectorStore.points.push(response.data)
 
           alert('绘制成功！')
-
           cancelDraw()
         }
       }
@@ -278,7 +332,8 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
 
   async function saveLandsToDatabase() {
     try {
-      if (!landsForm.value.name) return
+      const form = vectorStore.landsForm
+      if (!form.name) return
 
       if (window._tempImportGeometry) {
         const { type, coordinates, layerType } = window._tempImportGeometry
@@ -287,7 +342,7 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
         else if (type === 'Point') finalCoordinates = [Number(coordinates[0]), Number(coordinates[1])]
 
         const response = await createLands({
-          name: landsForm.value.name, type: landsForm.value.type, site_area: landsForm.value.site_area || 0,
+          name: form.name, type: form.type, site_area: form.site_area || 0,
           geometry: { type, coordinates: finalCoordinates }
         })
         if (response?.success) {
@@ -296,18 +351,18 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
             await vectorStore.loadLands()
             updateVectorLayer(layerType)
           }
-          showLandsForm.value = false
+          vectorStore.setShowLandsForm(false)
           delete window._tempImportGeometry
           if (window._resolveImport) window._resolveImport()
         }
         return
       }
 
-      if (selectedFeature.value?.id) {
-        const id = selectedFeature.value.id
+      if (vectorStore.selectedFeature?.id) {
+        const id = vectorStore.selectedFeature.id
         const source = layers.value.lands.layer?.getSource()
         const feature = source?.getFeatures().find(f => f.get('id') === id)
-        let geometry = selectedFeature.value.geometry
+        let geometry = vectorStore.selectedFeature.geometry
         if (feature) {
           geometry = {
             type: 'Polygon',
@@ -315,48 +370,48 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
           }
         }
 
-        const updateData = { name: landsForm.value.name, type: landsForm.value.type, site_area: landsForm.value.site_area || 0, geometry }
+        const updateData = { name: form.name, type: form.type, site_area: form.site_area || 0, geometry }
         const response = await updateLands(id, updateData)
         if (response.success) {
           if (feature) {
-            feature.set('name', landsForm.value.name)
-            feature.set('type', landsForm.value.type)
-            feature.set('site_area', landsForm.value.site_area)
+            feature.set('name', form.name)
+            feature.set('type', form.type)
+            feature.set('site_area', form.site_area)
           }
           const index = vectorStore.lands.findIndex(l => l.id === id)
           if (index !== -1) vectorStore.lands[index] = { ...vectorStore.lands[index], ...updateData, id }
-          selectedFeature.value = { ...selectedFeature.value, ...updateData, id }
+          vectorStore.selectedFeature = { ...vectorStore.selectedFeature, ...updateData, id }
 
           alert('更新成功！')
 
-          landsModify.setActive(false)
-          selectedFeature.value = null
-          popupPosition.value = null
-          isEditing.value = false
-          originalGeometry.value = null
-          showLandsForm.value = false
+          const landsModify = getLandsModify()
+          if (landsModify) landsModify.setActive(false)
+          vectorStore.selectedFeature = null
+          vectorStore.popupPosition = null
+          vectorStore.setIsEditing(false)
+          vectorStore.setOriginalGeometry(null)
+          vectorStore.setShowLandsForm(false)
         }
       } else {
-        if (!drawFeature) return
+        if (!vectorStore.drawFeature) return
         const response = await createLands({
-          name: landsForm.value.name, type: landsForm.value.type, site_area: landsForm.value.site_area || 0,
+          name: form.name, type: form.type, site_area: form.site_area || 0,
           geometry: {
             type: 'Polygon',
-            coordinates: drawFeature.getGeometry().getCoordinates().map(ring => ring.map(coord => toLonLat(coord)))
+            coordinates: vectorStore.drawFeature.getGeometry().getCoordinates().map(ring => ring.map(coord => toLonLat(coord)))
           }
         })
         if (response.success) {
-          const newFeature = drawFeature.clone()
+          const newFeature = vectorStore.drawFeature.clone()
           newFeature.set('id', response.data.id)
-          newFeature.set('name', landsForm.value.name)
-          newFeature.set('type', landsForm.value.type)
-          newFeature.set('site_area', landsForm.value.site_area)
+          newFeature.set('name', form.name)
+          newFeature.set('type', form.type)
+          newFeature.set('site_area', form.site_area)
           newFeature.set('layerType', 'lands')
           layers.value.lands.layer?.getSource()?.addFeature(newFeature)
           vectorStore.lands.push(response.data)
 
           alert('绘制成功！')
-
           cancelDraw()
         }
       }
@@ -367,8 +422,8 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
 
   // ==================== 删除功能 ====================
   async function deleteFeature(featureId) {
-    if (!selectedFeature.value) return
-    const layerType = selectedFeature.value.layerType
+    if (!vectorStore.selectedFeature) return
+    const layerType = vectorStore.selectedFeature?.layerType
     if (!confirm(`确定要删除这个${layerType === 'points' ? '设施' : '图形'}吗？`)) return
 
     try {
@@ -382,20 +437,19 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
       if (layerType === 'points') vectorStore.points = vectorStore.points.filter(item => item.id !== featureId)
       else vectorStore.lands = vectorStore.lands.filter(item => item.id !== featureId)
 
-      closePopup()
-
+      vectorStore.closePopup()
       alert('删除成功')
     } catch (error) {
       const source = layers.value[layerType]?.layer?.getSource()
       const feature = source?.getFeatures().find(f => f.get('id') === featureId)
       if (feature) source.removeFeature(feature)
-      closePopup()
+      vectorStore.closePopup()
     }
   }
 
   // ==================== 导入导出功能 ====================
   function handleImport(layerType) {
-    importLayerType.value = layerType
+    vectorStore.setImportLayerType(layerType)
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.geojson'
@@ -408,16 +462,21 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
     reader.onload = (e) => {
       try {
         const geojson = JSON.parse(e.target.result)
-        const layerType = importLayerType.value
+        const layerType = vectorStore.importLayerType
         const features = geojson.features || [geojson]
         const validFeatures = features.filter(f => {
           const type = f.geometry?.type
           return layerType === 'lands' ? (type === 'Polygon' || type === 'MultiPolygon') : (type === 'Point' || type === 'MultiPoint')
         })
-        if (validFeatures.length === 0) { alert(`文件中没有有效的${layerType === 'points' ? 'Point' : 'Polygon'}数据`); return }
-        importFeatures.value = validFeatures
+        if (validFeatures.length === 0) {
+          alert(`文件中没有有效的${layerType === 'points' ? 'Point' : 'Polygon'}数据`)
+          return
+        }
+        vectorStore.setImportFeatures(validFeatures)
         showCoordinateDialogForImport()
-      } catch (err) { alert('文件解析失败，请确保是有效的 GeoJSON 文件') }
+      } catch (err) {
+        alert('文件解析失败，请确保是有效的 GeoJSON 文件')
+      }
     }
     reader.readAsText(file, 'UTF-8')
   }
@@ -449,17 +508,23 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
         return
       }
       close()
-      if (epsg === 'EPSG:4547' && !proj4.defs('EPSG:4547')) proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
+      if (epsg === 'EPSG:4547' && !proj4.defs('EPSG:4547')) {
+        proj4.defs('EPSG:4547', '+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
+      }
       importWithTransform(epsg)
     }
-    cancelBtn.onclick = () => { close(); importFeatures.value = []; importLayerType.value = null }
+    cancelBtn.onclick = () => {
+      close()
+      vectorStore.setImportFeatures([])
+      vectorStore.setImportLayerType(null)
+    }
   }
 
   async function importWithTransform(sourceEPSG) {
     const targetEPSG = 'EPSG:4326'
     let successCount = 0
 
-    for (const feature of importFeatures.value) {
+    for (const feature of vectorStore.importFeatures) {
       let geom = feature.geometry
       let geomType = geom.type
       let coordinates = geom.coordinates
@@ -468,32 +533,46 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
       if (geomType === 'MultiPoint') { geomType = 'Point'; coordinates = coordinates[0] }
 
       if (sourceEPSG !== targetEPSG) {
-        try { coordinates = transformCoordinates(coordinates, sourceEPSG, targetEPSG, geomType) }
-        catch (err) { alert('坐标转换失败'); return }
+        try {
+          coordinates = transformCoordinates(coordinates, sourceEPSG, targetEPSG, geomType)
+        } catch (err) {
+          alert('坐标转换失败')
+          return
+        }
       }
 
       const props = feature.properties || {}
-      const layerType = importLayerType.value
+      const layerType = vectorStore.importLayerType
 
       if (layerType === 'points') {
-        pointsForm.value = { name: props.name || '', level: props.level || '', type: props.type || '', floor_area: props.floor_area || null, scale: props.scale || null }
+        vectorStore.updatePointsForm({
+          name: props.name || '',
+          level: props.level || '',
+          type: props.type || '',
+          floor_area: props.floor_area || null,
+          scale: props.scale || null
+        })
       } else {
-        landsForm.value = { name: props.name || '', type: props.type || '', site_area: props.site_area || null }
-        if (!landsForm.value.site_area && geomType === 'Polygon') {
+        vectorStore.updateLandsForm({
+          name: props.name || '',
+          type: props.type || '',
+          site_area: props.site_area || null
+        })
+        if (!vectorStore.landsForm.site_area && geomType === 'Polygon') {
           const tempCoords = coordinates.map(ring => ring.map(coord => fromLonLat(coord)))
-          landsForm.value.site_area = Math.round(new Polygon(tempCoords).getArea())
+          vectorStore.updateLandsForm({ site_area: Math.round(new Polygon(tempCoords).getArea()) })
         }
       }
 
       window._tempImportGeometry = { type: geomType, coordinates, layerType }
-      layerType === 'points' ? (showPointForm.value = true) : (showLandsForm.value = true)
+      layerType === 'points' ? vectorStore.setShowPointForm(true) : vectorStore.setShowLandsForm(true)
       await new Promise(resolve => window._resolveImport = resolve)
       successCount++
     }
 
     alert(`成功导入 ${successCount} 个要素`)
-    importFeatures.value = []
-    importLayerType.value = null
+    vectorStore.setImportFeatures([])
+    vectorStore.setImportLayerType(null)
     delete window._tempImportGeometry
     delete window._resolveImport
   }
@@ -566,7 +645,6 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
 
   // 单个要素导出函数
   async function exportSingleFeature(feature) {
-    // 创建坐标系选择对话框
     const mask = document.createElement('div')
     mask.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9998;'
 
@@ -606,7 +684,6 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
       const layerType = feature.layerType
       const geomType = layerType === 'points' ? 'Point' : 'Polygon'
 
-      // 获取几何坐标（从地图要素中获取，确保坐标正确）
       const source = layers.value[layerType]?.layer?.getSource()
       const mapFeature = source?.getFeatures().find(f => f.get('id') === feature.id)
 
@@ -618,33 +695,23 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
       const geometry = mapFeature.getGeometry()
       let coordinates
 
-      // 获取原始坐标（3857），然后转换为4326
       if (geomType === 'Point') {
         const coords3857 = geometry.getCoordinates()
         coordinates = toLonLat(coords3857)
       } else {
         const coords3857 = geometry.getCoordinates()
-        coordinates = coords3857.map(ring =>
-          ring.map(coord => toLonLat(coord))
-        )
+        coordinates = coords3857.map(ring => ring.map(coord => toLonLat(coord)))
       }
 
-      // 如果需要转换到4547
       if (targetEPSG === 'EPSG:4547') {
         if (geomType === 'Point') {
           coordinates = proj4('EPSG:4326', 'EPSG:4547', coordinates)
         } else {
-          coordinates = coordinates.map(ring =>
-            ring.map(coord => proj4('EPSG:4326', 'EPSG:4547', coord))
-          )
+          coordinates = coordinates.map(ring => ring.map(coord => proj4('EPSG:4326', 'EPSG:4547', coord)))
         }
       }
 
-      // 构建属性
-      const properties = {
-        name: feature.name,
-        type: feature.type
-      }
+      const properties = { name: feature.name, type: feature.type }
       if (layerType === 'points') {
         properties.level = feature.level
         properties.floor_area = feature.floor_area
@@ -653,7 +720,6 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
         properties.site_area = feature.site_area
       }
 
-      // 构建 GeoJSON
       const geojson = {
         type: 'FeatureCollection',
         crs: { type: 'name', properties: { name: targetEPSG } },
@@ -664,7 +730,6 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
         }]
       }
 
-      // 下载文件
       const dataStr = JSON.stringify(geojson, null, 2)
       const blob = new Blob([dataStr], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
@@ -679,21 +744,7 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
     cancelBtn.onclick = close
   }
 
-  // 关闭弹窗（调用外部传入的 closePopupCallback）
-  function closePopup() {
-    closePopupCallback();
-  }
-
   return {
-    selectedFeature,
-    popupPosition,
-    showPointForm,
-    showLandsForm,
-    isDrawing,
-    isEditing,
-    originalGeometry,
-    pointsForm,
-    landsForm,
     startDrawing,
     cancelDraw,
     toggleEditMode,
@@ -706,6 +757,5 @@ export function useFeature(map, layers, vectorStore, updateVectorLayer, pointMod
     handleExport,
     exportSingleFeature,
     calcArea,
-    closePopup
   }
 }

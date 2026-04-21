@@ -61,7 +61,7 @@
     <div class="right_sidebar">
       <h3>信息显示</h3>
       <!-- 供需分析面板 -->
-      <div class="analysis-panel"  style="display: none;">
+      <div class="analysis-panel" style="display: none;">
         <h4>供需分析</h4>
         <div class="analysis-content">
           <p style="color: #aaa; text-align: center;">分析中...</p>
@@ -76,10 +76,10 @@
         </div>
       </div>
       
-      <div class="operation-hint" v-if="isDrawing || showPointForm || showLandsForm || selectedFeature">
+      <div class="operation-hint" v-if="vectorStore.isDrawing || vectorStore.showPointForm || vectorStore.showLandsForm || vectorStore.selectedFeature">
         <h4>操作提示</h4>
         <div class="hint-content">
-          <p v-if="isDrawing">
+          <p v-if="vectorStore.isDrawing">
             🔹 按 <kbd>Backspace</kbd> 撤销上一个顶点<br>
             🔹 按 <kbd>Esc</kbd> 退出绘制
           </p>
@@ -93,47 +93,47 @@
     </div>
     
     <!-- 要素弹窗 -->
-    <div v-if="selectedFeature && popupPosition" 
-          :style="{left: popupPosition.x + 'px', top: popupPosition.y + 'px'}" 
+    <div v-if="vectorStore.selectedFeature && vectorStore.popupPosition" 
+          :style="{left: vectorStore.popupPosition.x + 'px', top: vectorStore.popupPosition.y + 'px'}" 
           class="feature-popup">
       <div class="popup-content">
-        <button @click="closePopup" class="close-btn">x</button>
-        <h4>{{ selectedFeature.name }}</h4>
-        <div v-if="selectedFeature.layerType === 'points'">
-          <p><strong>设施级别：</strong>{{ selectedFeature.level }}</p>
-          <p><strong>设施类型：</strong>{{ selectedFeature.type }}</p>
-          <p><strong>建筑面积：</strong>{{ selectedFeature.floor_area }}平方米</p>
-          <p><strong>服务规模：</strong>{{ selectedFeature.scale }}人</p>
+        <button @click="vectorStore.closePopup" class="close-btn">x</button>
+        <h4>{{ vectorStore.selectedFeature.name }}</h4>
+        <div v-if="vectorStore.selectedFeature.layerType === 'points'">
+          <p><strong>设施级别：</strong>{{ vectorStore.selectedFeature.level }}</p>
+          <p><strong>设施类型：</strong>{{ vectorStore.selectedFeature.type }}</p>
+          <p><strong>建筑面积：</strong>{{ vectorStore.selectedFeature.floor_area }}平方米</p>
+          <p><strong>服务规模：</strong>{{ vectorStore.selectedFeature.scale }}人</p>
         </div>
         <div v-else>
-          <p><strong>用地类型：</strong>{{ selectedFeature.type }}</p>
-          <p><strong>用地面积：</strong>{{ selectedFeature.site_area }}平方米</p>
+          <p><strong>用地类型：</strong>{{ vectorStore.selectedFeature.type }}</p>
+          <p><strong>用地面积：</strong>{{ vectorStore.selectedFeature.site_area }}平方米</p>
         </div>
         <div class="popup-buttons">
-          <button @click="toggleEditMode(selectedFeature)" class="edit-btn" :class="{ 'active': isEditing }">
-            {{ isEditing ? '编辑属性' : '编辑图形' }}
+          <button @click="toggleEditMode(vectorStore.selectedFeature)" class="edit-btn" :class="{ 'active': vectorStore.isEditing }">
+            {{ vectorStore.isEditing ? '编辑属性' : '编辑图形' }}
           </button>
-          <button @click="exportSingleFeature(selectedFeature)" class="export-btn">导出数据</button>
-          <button v-if="selectedFeature" @click="deleteFeature(selectedFeature.id)" class="delete-btn">
-            删除{{ selectedFeature.layerType === 'points' ? '设施' : '用地' }}
+          <button @click="exportSingleFeature(vectorStore.selectedFeature)" class="export-btn">导出数据</button>
+          <button v-if="vectorStore.selectedFeature" @click="deleteFeature(vectorStore.selectedFeature.id)" class="delete-btn">
+            删除{{ vectorStore.selectedFeature.layerType === 'points' ? '设施' : '用地' }}
           </button>
         </div>
       </div>
     </div>
 
     <!-- 设施点表单 -->
-    <div v-if="showPointForm" class="point-form">
+    <div v-if="vectorStore.showPointForm" class="point-form">
       <div class="form-overlay" @click="cancelDraw"></div>
       <div class="form-content">
-        <h4>{{ isEditing ? '编辑公共设施' : '添加公共设施' }}</h4>
+        <h4>{{ vectorStore.isEditing ? '编辑公共设施' : '添加公共设施' }}</h4>
         <form @submit.prevent="savePointToDatabase">
           <div class="form-group">
             <label>设施名称：</label>
-            <input v-model="pointsForm.name" required placeholder="例如：玉龙学校">
+            <input v-model="vectorStore.pointsForm.name" required placeholder="例如：玉龙学校">
           </div>
           <div class="form-group">
             <label>设施级别：</label>
-            <select v-model="pointsForm.level" required>
+            <select v-model="vectorStore.pointsForm.level" required>
               <option value="">请选择级别</option>
               <option value="区域级">区域级</option>
               <option value="社区级">社区级</option>
@@ -141,7 +141,7 @@
           </div>
           <div class="form-group">
             <label>设施类型：</label>
-            <select v-model="pointsForm.type" required>
+            <select v-model="vectorStore.pointsForm.type" required>
               <option value="">请选择类型</option>
               <option value="行政办公场所">行政办公场所</option>
               <option value="社区管理机构">社区管理机构</option>
@@ -170,11 +170,11 @@
           </div>
           <div class="form-group">
             <label>建筑面积（平方米）：</label>
-            <input v-model="pointsForm.floor_area" type="number" required placeholder="手动输入">
+            <input v-model="vectorStore.pointsForm.floor_area" type="number" required placeholder="手动输入">
           </div>
           <div class="form-group">
             <label>服务规模（人）：</label>
-            <input v-model="pointsForm.scale" type="number" placeholder="手动输入">
+            <input v-model="vectorStore.pointsForm.scale" type="number" placeholder="手动输入">
           </div>
           <div class="form-buttons">
             <button type="button" @click="cancelDraw" class="btn-cancel">取消</button>
@@ -185,18 +185,18 @@
     </div>
 
     <!-- 设施用地表单 -->
-    <div v-if="showLandsForm" class="lands-form">
+    <div v-if="vectorStore.showLandsForm" class="lands-form">
       <div class="form-overlay" @click="cancelDraw"></div>
       <div class="form-content">
-        <h4>{{ isEditing ? '编辑土地利用' : '添加土地利用' }}</h4>
+        <h4>{{ vectorStore.isEditing ? '编辑土地利用' : '添加土地利用' }}</h4>
         <form @submit.prevent="saveLandsToDatabase">
           <div class="form-group">
             <label>设施名称：</label>
-            <input v-model="landsForm.name" type="text" placeholder="例如：玉龙学校" required>
+            <input v-model="vectorStore.landsForm.name" type="text" placeholder="例如：玉龙学校" required>
           </div>
           <div class="form-group">
             <label>用地类型：</label>
-            <select v-model="landsForm.type" required>
+            <select v-model="vectorStore.landsForm.type" required>
               <option value="">请选择类型</option>
               <option value="商业用地">商业用地</option>
               <option value="居住用地">居住用地</option>
@@ -212,7 +212,7 @@
           <div class="form-group">
             <label>用地面积（平方米）：</label>
             <div style="display: flex; gap: 8px;">
-              <input v-model="landsForm.site_area" type="number" placeholder="手动输入" style="flex: 1;">
+              <input v-model="vectorStore.landsForm.site_area" type="number" placeholder="手动输入" style="flex: 1;">
               <button type="button" @click="calcArea" class="calc-btn">自动计算</button>
             </div>
           </div>
@@ -228,54 +228,32 @@
 
 <script setup>
 // Vue 核心
-import { onMounted, onUnmounted, ref, computed, markRaw, watch } from 'vue'
+import { onMounted, onUnmounted, ref, computed, markRaw } from 'vue'
 
 // OpenLayers 核心
-import { Map, View } from 'ol'
 import 'ol/ol.css'
 
 // OpenLayers 图层与数据源
 import TileLayer from 'ol/layer/Tile'
-import VectorLayer from 'ol/layer/Vector'
 import XYZ from 'ol/source/XYZ'
-import VectorSource from 'ol/source/Vector'
-
-// OpenLayers 要素与几何
-import Feature from 'ol/Feature'
-import { Point, Polygon } from 'ol/geom'
-
-// OpenLayers 样式
-import { Style, Fill, Stroke, Text, Circle } from 'ol/style'
-
-// OpenLayers 交互与控件
-import { FullScreen, ScaleLine, MousePosition, defaults } from "ol/control"
-import { createStringXY } from "ol/coordinate"
-import { Draw, Modify } from 'ol/interaction'
-
-// 工具库
-import { fromLonLat, toLonLat } from 'ol/proj'
-
 
 // 内部模块
 import { useMap2D } from '@/logics/useMap2D'
 import { useMap3D } from '@/logics/useMap3D'
 import { useFeature } from '@/logics/useFeature'
 import { useVectorStore } from '@/stores/vectorStore'
-import { proj4,transformCoordinates, calculateAreaInEPSG4547 } from '@/utils/coordinate';
-import { getPointIcon, drawHalfCylinder, drawServiceRadius } from '@/utils/cesiumHelper'
-import { createPoints, updatePoints, deletePoints, createLands, updateLands, deleteLands, getEducationSupply } from '@/services/api'
 
 // ==================== 常量定义 ====================
 const TIANDITU_API_KEY = import.meta.env.VITE_TIANDITU_API_KEY
 
 // 建筑类型颜色样式
 const buildingColors = {
-  '商业': 'rgba(255, 0, 0, 0.8)',        // 商业用地色
-  '居住': 'rgba(255, 255, 45, 0.8)',     // 居住用地色
-  '工业': 'rgba(187, 150, 116, 0.8)',    // 工业用地色
-  '配套': 'rgba(254, 24, 201, 0.8)',     // GIC用地色
-};
-const defaultBuildingColor = 'rgba(200, 200, 200, 0.7)';
+  '商业': 'rgba(255, 0, 0, 0.8)',
+  '居住': 'rgba(255, 255, 45, 0.8)',
+  '工业': 'rgba(187, 150, 116, 0.8)',
+  '配套': 'rgba(254, 24, 201, 0.8)',
+}
+const defaultBuildingColor = 'rgba(200, 200, 200, 0.7)'
 
 // 底图配置
 const basemaps = ref([
@@ -308,7 +286,7 @@ const basemaps = ref([
 
 // ==================== 响应式状态 ====================
 const mapContainer = ref(null)
-const cesiumContainer = ref(null)  // Cesium 地图容器
+const cesiumContainer = ref(null)
 const activeBasemapId = ref('vector')
 const basemapPanelVisible = ref(false)
 
@@ -318,38 +296,26 @@ let escHandler = null
 // ==================== 计算属性 ====================
 const pointsCount = computed(() => vectorStore.points.length)
 const landsCount = computed(() => vectorStore.lands.length)
-// 获取当前底图名称
 const getActiveBasemap = computed(() => basemaps.value.find(b => b.id === activeBasemapId.value))
 
-
-// 二维逻辑
+// 1、二维逻辑
 const {
   map,
   layers,
-  pointModify,
-  landsModify,
-  currentHighlightFeature,
-  initMap,
+  initMap: initMap2D,
+  updateVectorLayer,
+  getPointModify,
+  getLandsModify,
+  clearHighlight,
   switchBasemap: switchBasemap2D,
   toggleRoadNet,
   getThumbColor,
   toggleLayer,
-  updateVectorLayer,
   onTypeChange,
-  closePopup: closeMapPopup
-} = useMap2D(mapContainer, basemaps, vectorStore, featureState)
+} = useMap2D(mapContainer, basemaps)
 
-// 调用useFeature逻辑
+// 2、调用useFeature逻辑
 const {
-  selectedFeature,
-  popupPosition,
-  showPointForm,
-  showLandsForm,
-  isDrawing,
-  isEditing,
-  originalGeometry,
-  pointsForm,
-  landsForm,
   startDrawing,
   cancelDraw,
   toggleEditMode,
@@ -361,22 +327,9 @@ const {
   handleExport,
   exportSingleFeature,
   calcArea,
-  closePopup: closeFeaturePopup
-} = useFeature(map, layers, vectorStore, updateVectorLayer, pointModify, landsModify, currentHighlightFeature, closeMapPopup);
+} = useFeature(map, layers, updateVectorLayer, getPointModify, getLandsModify, clearHighlight)
 
-// 组装 featureState 对象
-const featureState = {
-  selectedFeature,
-  popupPosition,
-  showPointForm,
-  showLandsForm,
-  isDrawing,
-  isEditing,
-  exitEditMode,
-  closePopup: closeFeaturePopup
-};
-
-// 三维逻辑
+// 3、三维逻辑
 const {
   viewer,
   cesiumInitialized,
@@ -384,27 +337,23 @@ const {
   startFlythrough,
   handleAnalysisClick,
   loadPointsAndLands,
-  isAnalyzing,
   analysisButtonText,
-} = useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defaultBuildingColor, vectorStore, layers, activeBasemapId)
+} = useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defaultBuildingColor, layers, activeBasemapId)
 
-// 合并关闭弹窗方法
-const closePopup = () => {
-  closeMapPopup()
-  closeFeaturePopup()
+// 初始化地图
+function initMap() {
+  initMap2D()
 }
 
 // 底图切换
 const switchBasemap = async (id) => {
   if (id === '3d') {
-    // 隐藏二维容器，显示三维容器
     if (map.value) {
       map.value.getTargetElement().style.display = 'none'
     }
     if (cesiumContainer.value) {
       cesiumContainer.value.style.display = 'block'
     }
-    // 加载 Cesium
     if (!cesiumInitialized.value) {
       await loadCesium()
     } else {
@@ -414,10 +363,8 @@ const switchBasemap = async (id) => {
       }, 50)
     }
   } else {
-    // 切换二维底图
     switchBasemap2D(id)
-    // 显示二维容器，隐藏三维容器
-    if (map.value && map.value.getTargetElement()) {
+    if (map.value?.getTargetElement()) {
       map.value.getTargetElement().style.display = 'block'
     }
     if (cesiumContainer.value) {
@@ -427,63 +374,19 @@ const switchBasemap = async (id) => {
   activeBasemapId.value = id
 }
 
-// 原切换地图逻辑
-// async function switchBasemap(basemapId) {
-//   if (!map || activeBasemapId.value === basemapId) return
-
-//   if (basemapId === '3d') {
-//     //三维地图切换逻辑
-//     map.getTargetElement().style.display = 'none'  // 隐藏 2D 地图容器
-//     if (cesiumContainer.value) cesiumContainer.value.style.display = 'block'  // 显示 3D 容器
-
-//     // 加载 Cesium
-//     if (!cesiumInitialized) {
-//       await loadCesium()
-//     } else {
-//       setTimeout(() => {
-//         if (viewer) viewer.resize()
-//         // 重新加载点和面
-//         loadPointsAndLands()
-//       }, 50)
-//     }
-//     activeBasemapId.value = basemapId
-//     return
-//   } else {
-//     // 二维地图切换逻辑
-//     const oldLayers = map.getLayers().getArray().filter(layer => layer instanceof TileLayer)
-//     oldLayers.forEach(layer => map.removeLayer(layer))
-
-//     const newBasemap = basemaps.value.find(e => e.id === basemapId)
-//     if (newBasemap && newBasemap.layer) {
-//       map.addLayer(newBasemap.layer)
-//       if (newBasemap.roadNetLayer) map.addLayer(newBasemap.roadNetLayer)
-//     }
-
-//     // 恢复显示二维地图容器，隐藏三维地图容器
-//     if (map.getTargetElement()) {
-//       map.getTargetElement().style.display = 'block'
-//     }
-//     if (cesiumContainer.value) {
-//       cesiumContainer.value.style.display = 'none'
-//     }
-//   }
-
-//   activeBasemapId.value = basemapId
-// }
-
 // ==================== 生命周期 ====================
 onMounted(() => {
   if (!mapContainer.value) return
   initMap()
-  // 初始隐藏三维容器
   if (cesiumContainer.value) cesiumContainer.value.style.display = 'none'
   
   escHandler = (e) => {
     if (e.key !== 'Escape') return
-    if (showPointForm.value || showLandsForm.value) cancelDraw()
-    else if (isEditing.value) {
+    if (vectorStore.showPointForm || vectorStore.showLandsForm) {
+      cancelDraw()
+    } else if (vectorStore.isEditing) {
       exitEditMode()
-      closePopup()
+      vectorStore.closePopup()
     }
   }
   document.addEventListener('keydown', escHandler)
@@ -491,11 +394,11 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (escHandler) document.removeEventListener('keydown', escHandler)
-  if (map) {
+  if (map.value) {
     map.value.setTarget(null)
     map.value = null
   }
-  if (viewer) {
+  if (viewer.value) {
     viewer.value.destroy()
     viewer.value = null
   }

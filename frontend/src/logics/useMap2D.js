@@ -84,10 +84,20 @@ export function useMap2D(mapContainer, basemaps) {
       ]
     }
   })
+  // 导入矢量数据的store
+  const vectorStore = useVectorStore()
 
   let currentHighlightFeature = null;
   let pointModify = null;
   let landsModify = null;
+
+  // 清除高亮函数
+  function clearHighlight() {
+    if (currentHighlightFeature) {
+      currentHighlightFeature.setStyle(null);
+      currentHighlightFeature = null;
+    }
+  }
 
   // 地图初始化
   function initMap() {
@@ -158,7 +168,7 @@ export function useMap2D(mapContainer, basemaps) {
       source.addFeature(new Feature({ geometry: geom, ...props }))
     })
 
-    if (layerObj.layer) map.removeLayer(layerObj.layer)
+    if (layerObj.layer) map.value.removeLayer(layerObj.layer)
     layerObj.layer = new VectorLayer({ source, style: isPoint ? createPointsStyle : createLandsStyle, visible: layerObj.visible, zIndex: isPoint ? 3 : 2 })
     map.value.addLayer(layerObj.layer)
 
@@ -223,11 +233,11 @@ export function useMap2D(mapContainer, basemaps) {
   // ==================== 交互与工具 ====================
   function setupMapInteractions() {
     map.value.on('click', (event) => {
-      // 通过 featureState 访问
-      if (vectorStore.mapInteraction.showLandsForm ||
-        vectorStore.mapInteraction.isDrawing ||
-        vectorStore.mapInteraction.showPointForm ||
-        vectorStore.mapInteraction.isEditing) {
+      // 通过 vectorStore 访问状态
+      if (vectorStore.showLandsForm ||
+        vectorStore.isDrawing ||
+        vectorStore.showPointForm ||
+        vectorStore.isEditing) {
         return;
       }
 
@@ -245,17 +255,17 @@ export function useMap2D(mapContainer, basemaps) {
         feature.setStyle(createHighlightStyle(feature))
         currentHighlightFeature = feature
 
-        if (featureState.isEditing.value && featureState.selectedFeature.value?.id === properties.id) return
-        if (featureState.isEditing.value) exitEditMode()
-        featureState.selectedFeature.value = properties
-        popupPosition.value = { x: event.pixel[0] + 20, y: event.pixel[1] }
+        if (vectorStore.isEditing && vectorStore.selectedFeature?.id === properties.id) return
+        if (vectorStore.isEditing) vectorStore.exitEditMode()
+        vectorStore.selectedFeature = properties
+        vectorStore.popupPosition = { x: event.pixel[0] + 20, y: event.pixel[1] }
       } else {
         // 点击空白区域，清除高亮
         if (currentHighlightFeature) {
           currentHighlightFeature.setStyle(null)
           currentHighlightFeature = null
         }
-        featureState.closePopup()
+        vectorStore.closePopup()
       }
     })
 
@@ -266,13 +276,16 @@ export function useMap2D(mapContainer, basemaps) {
 
   // 修改设施点交互
   function setupPointModify(source) {
-    if (pointModify) map.removeInteraction(pointModify)
+    if (pointModify) map.value.removeInteraction(pointModify)
     pointModify = new Modify({ source })
     pointModify.on('modifyend', (event) => {
       const modifiedFeature = event.features.item(0)
       const id = modifiedFeature.get('id')
-      if (selectedFeature.value?.id === id) {
-        selectedFeature.value.geometry = { type: 'Point', coordinates: toLonLat(modifiedFeature.getGeometry().getCoordinates()) }
+      if (vectorStore.selectedFeature?.id === id) {
+        vectorStore.selectedFeature = {
+          ...vectorStore.selectedFeature,
+          geometry: { type: 'Point', coordinates: toLonLat(modifiedFeature.getGeometry().getCoordinates()) }
+        }
       }
     })
     map.value.addInteraction(pointModify)
@@ -281,16 +294,19 @@ export function useMap2D(mapContainer, basemaps) {
 
   // 修改设施用地交互
   function setupLandsModify(source) {
-    if (landsModify) map.removeInteraction(landsModify)
+    if (landsModify) map.value.removeInteraction(landsModify)
     landsModify = new Modify({ source })
     landsModify.on('modifyend', (event) => {
       const modifiedFeature = event.features.item(0)
       const id = modifiedFeature.get('id')
-      if (selectedFeature.value?.id === id) {
+      if (vectorStore.selectedFeature?.id === id) {
         const geometry = modifiedFeature.getGeometry()
-        selectedFeature.value.geometry = {
-          type: 'Polygon',
-          coordinates: geometry.getCoordinates().map(ring => ring.map(coord => toLonLat(coord)))
+        vectorStore.selectedFeature = {
+          ...vectorStore.selectedFeature,
+          geometry: {
+            type: 'Polygon',
+            coordinates: geometry.getCoordinates().map(ring => ring.map(coord => toLonLat(coord)))
+          }
         }
       }
     })
@@ -306,14 +322,30 @@ export function useMap2D(mapContainer, basemaps) {
       currentHighlightFeature = null
     }
 
-    if (featureState.isEditing.value) { featureState.exitEditMode(); return }
-    featureState.selectedFeature.value = null
-    featureState.popupPosition.value = null
+    if (vectorStore.isEditing) {
+      vectorStore.exitEditMode()
+      return
+    }
+    vectorStore.selectedFeature = null
+    vectorStore.popupPosition = null
   }
 
-  return { map, layers, pointModify, landsModify, currentHighlightFeature, initMap, switchBasemap, toggleRoadNet, getThumbColor, toggleLayer, updateVectorLayer, setupMapInteractions, onTypeChange, closePopup }
+  return {
+    map,
+    layers,
+    initMap,
+    setupMapInteractions,
+    clearHighlight,
+    switchBasemap,
+    toggleRoadNet,
+    getThumbColor,
+    toggleLayer,
+    onTypeChange,
+    updateVectorLayer,
+    setupPointModify,
+    setupLandsModify,
+    getPointModify: () => pointModify,
+    getLandsModify: () => landsModify,
+    closePopup,
+  }
 }
-
-
-
-
