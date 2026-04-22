@@ -168,8 +168,19 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
         }
 
         setTimeout(() => {
-          const properties = entity.properties?.getValue() || entity._properties;
-          if (properties) showCesiumPopup(properties, click.position);
+          let properties = entity.properties;
+          if (properties && typeof properties.getValue === 'function') {
+            properties = properties.getValue();
+          }
+          // 对于建筑实体，properties 可能直接挂在 entity 上
+          if (!properties && entity._properties) {
+            properties = entity._properties;
+          }
+          if (properties) {
+            showCesiumPopup(properties, click.position);
+          } else {
+            console.warn('未能提取到实体属性');
+          }
         }, 100);
       } else {
         closeCesiumPopup();
@@ -216,15 +227,10 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     }
   }
 
-  async function loadPointsAndLands() {
-    const pointsConfig = layers.points;
-    const landsConfig = layers.lands;
-
-    // 如果两个图层都不可见，直接返回
-    if (!pointsConfig.visible && !landsConfig.visible) {
-      console.log('两个图层都不可见，跳过加载');
-      return;
-    }
+  async function loadPointsAndLands(currentLayers = layers) {
+    // 使用传入的 currentLayers 而不是闭包的 layers
+    const pointsConfig = currentLayers.points;
+    const landsConfig = currentLayers.lands;
 
     // 清除旧数据
     pointEntities.forEach(e => viewer.value.entities.remove(e));
@@ -621,16 +627,17 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   function showCesiumPopup(properties, screenPosition) {
     if (!cesiumPopupDiv) {
       cesiumPopupDiv = document.createElement('div');
-      cesiumPopupDiv.className = 'cesium-popup';
+      cesiumPopupDiv.className = 'cesium-popup-3d';
       document.body.appendChild(cesiumPopupDiv);
 
       cesiumPopupCloseBtn = document.createElement('button');
-      cesiumPopupCloseBtn.className = 'cesium-popup-close';
+      cesiumPopupCloseBtn.className = 'cesium-popup-close-3d';
       cesiumPopupCloseBtn.innerHTML = '×';
       cesiumPopupCloseBtn.onclick = closeCesiumPopup;
       cesiumPopupDiv.appendChild(cesiumPopupCloseBtn);
     }
 
+    // 构建内容 HTML
     let html = `<h4>${properties.name || '未命名'}</h4>`;
     if (properties.level !== undefined) {
       html += `<p><strong>设施级别：</strong>${properties.level || '-'}</p>`;
@@ -648,11 +655,22 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
       if (properties.floor_area) html += `<p><strong>建筑面积：</strong>${properties.floor_area}平方米</p>`;
     }
 
-    cesiumPopupDiv.innerHTML = html;
-    cesiumPopupDiv.appendChild(cesiumPopupCloseBtn);
-    cesiumPopupDiv.style.display = 'block';
+    // 查找或创建内容包装器
+    let contentWrapper = cesiumPopupDiv.querySelector('.popup-content-wrapper-3d');
+    if (!contentWrapper) {
+      contentWrapper = document.createElement('div');
+      contentWrapper.className = 'popup-content-wrapper-3d';
+      // 将包装器插入到关闭按钮之前
+      cesiumPopupDiv.insertBefore(contentWrapper, cesiumPopupCloseBtn);
+    }
+
+    // 更新内容
+    contentWrapper.innerHTML = html;
+
+    // 定位并显示
     cesiumPopupDiv.style.left = `${screenPosition.x + 15}px`;
     cesiumPopupDiv.style.top = `${screenPosition.y}px`;
+    cesiumPopupDiv.style.display = 'block';
   }
 
   function closeCesiumPopup() {
