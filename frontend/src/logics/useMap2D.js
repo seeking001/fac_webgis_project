@@ -104,7 +104,7 @@ export function useMap2D(mapContainer, basemaps) {
     if (!mapContainer.value) return
     map.value = new Map({
       target: mapContainer.value,
-      layers: [basemaps.value[0].layer, basemaps.value[0].roadNetLayer],
+      layers: [basemaps[0].layer, basemaps[0].roadNetLayer],
       view: new View({ center: fromLonLat([114.0245, 22.6115]), zoom: 15, projection: 'EPSG:3857' }),
       controls: defaults().extend([
         new FullScreen(),
@@ -123,7 +123,7 @@ export function useMap2D(mapContainer, basemaps) {
     const oldLayers = map.value.getLayers().getArray().filter(layer => layer instanceof TileLayer);
     oldLayers.forEach(layer => map.value.removeLayer(layer));
 
-    const newBasemap = basemaps.value.find(e => e.id === basemapId);
+    const newBasemap = basemaps.find(e => e.id === basemapId);
     if (newBasemap && newBasemap.layer) {
       map.value.addLayer(newBasemap.layer);
       if (newBasemap.roadNetLayer) map.value.addLayer(newBasemap.roadNetLayer);

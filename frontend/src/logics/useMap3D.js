@@ -96,19 +96,19 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     await loadEducationSupplyData();
     setupCesiumClickHandler();
 
-    cesiumWatcher = watch(
-      () => [
-        layers.value.points.visible,
-        layers.value.points.selectedType,
-        layers.value.lands.visible,
-        layers.value.lands.selectedType
-      ],
-      () => {
-        if (activeBasemapId.value === '3d') {
-          loadPointsAndLands();
-        }
-      }
-    );
+    // cesiumWatcher = watch(
+    //   () => [
+    //     layers.points.visible,
+    //     layers.points.selectedType,
+    //     layers.lands.visible,
+    //     layers.lands.selectedType
+    //   ],
+    //   () => {
+    //     if (activeBasemapId.value === '3d') {
+    //       loadPointsAndLands();
+    //     }
+    //   }
+    // );
 
     cesiumInitialized.value = true;
   }
@@ -217,6 +217,16 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   }
 
   async function loadPointsAndLands() {
+    const pointsConfig = layers.points;
+    const landsConfig = layers.lands;
+
+    // 如果两个图层都不可见，直接返回
+    if (!pointsConfig.visible && !landsConfig.visible) {
+      console.log('两个图层都不可见，跳过加载');
+      return;
+    }
+
+    // 清除旧数据
     pointEntities.forEach(e => viewer.value.entities.remove(e));
     landEntities.forEach(e => viewer.value.entities.remove(e));
     pointEntities = [];
@@ -228,9 +238,6 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     if (vectorStore.lands.length === 0) {
       await vectorStore.loadLands();
     }
-
-    const pointsConfig = layers.value.points;
-    const landsConfig = layers.value.lands;
 
     if (pointsConfig.visible) {
       let filteredPoints = vectorStore.points;
