@@ -19,10 +19,6 @@ const props = defineProps({
     type: String,
     required: true
   },
-  layers: {
-    type: Object,
-    required: true
-  },
   activeBasemapId: {
     type: String,
     required: true
@@ -33,11 +29,69 @@ const emit = defineEmits(['ready'])
 
 const cesiumContainer = ref(null)
 
+// 三维地图内部管理的图层状态
+const layers = ref({
+  points: {
+    name: '设施点',
+    visible: false,
+    loaded: false,
+    layer: null,
+    selectedType: '全部类型',
+    types: [
+      { label: '全部类型', value: '全部类型' },
+      { label: '行政办公场所', value: '行政办公场所' },
+      { label: '社区管理机构', value: '社区管理机构' },
+      { label: '大型文化设施', value: '大型文化设施' },
+      { label: '大型体育设施', value: '大型体育设施' },
+      { label: '社区文化设施', value: '社区文化设施' },
+      { label: '社区体育设施', value: '社区体育设施' },
+      { label: '医院', value: '医院' },
+      { label: '门诊部', value: '门诊部' },
+      { label: '社区健康服务中心', value: '社区健康服务中心' },
+      { label: '幼儿园', value: '幼儿园' },
+      { label: '小学', value: '小学' },
+      { label: '初中', value: '初中' },
+      { label: '九年一贯制学校', value: '九年一贯制学校' },
+      { label: '高中', value: '高中' },
+      { label: '高等教育', value: '高等教育' },
+      { label: '职业教育', value: '职业教育' },
+      { label: '养老院', value: '养老院' },
+      { label: '儿童福利院', value: '儿童福利院' },
+      { label: '残疾人服务中心', value: '残疾人服务中心' },
+      { label: '社区老年人日间照料中心', value: '社区老年人日间照料中心' },
+      { label: '社区托儿机构', value: '社区托儿机构' },
+      { label: '社区救助站', value: '社区救助站' },
+      { label: '其它设施', value: '其它设施' }
+    ]
+  },
+  lands: {
+    name: '设施用地',
+    visible: false,
+    loaded: false,
+    layer: null,
+    selectedType: '全部类型',
+    types: [
+      { label: '全部类型', value: '全部类型' },
+      { label: '商业用地', value: '商业用地' },
+      { label: '居住用地', value: '居住用地' },
+      { label: '工业用地', value: '工业用地' },
+      { label: '公园绿地', value: '公园绿地' },
+      { label: '行政管理用地', value: '行政管理用地' },
+      { label: '文体设施用地', value: '文体设施用地' },
+      { label: '医疗卫生用地', value: '医疗卫生用地' },
+      { label: '教育设施用地', value: '教育设施用地' },
+      { label: '社会福利用地', value: '社会福利用地' }
+    ]
+  }
+})
+
 // 三维逻辑
 const {
   viewer,
   cesiumInitialized,
   loadCesium,
+  toggleLayer,
+  onTypeChange,
   startFlythrough,
   handleAnalysisClick,
   loadPointsAndLands,
@@ -48,7 +102,7 @@ const {
   props.tiandituApiKey,
   props.buildingColors,
   props.defaultBuildingColor,
-  props.layers,
+  layers,
   props.activeBasemapId
 )
 
@@ -61,7 +115,10 @@ defineExpose({
   handleAnalysisClick,
   loadPointsAndLands,
   closeCesiumPopup,
-  analysisButtonText
+  analysisButtonText,
+  layers,
+  toggleLayer,
+  onTypeChange
 })
 
 // 当激活底图变为三维时，加载 Cesium
@@ -72,7 +129,7 @@ watch(() => props.activeBasemapId, async (newId) => {
     }
     
     if (cesiumInitialized.value) {
-      loadPointsAndLands(props.layers)  // 传递最新的layers
+      loadPointsAndLands(layers.value)  // 传递最新的layers
     }
   }
 })
@@ -80,14 +137,14 @@ watch(() => props.activeBasemapId, async (newId) => {
 // 新增：监听 layers 变化
 watch(
   () => [
-    props.layers.points.visible,
-    props.layers.points.selectedType,
-    props.layers.lands.visible,
-    props.layers.lands.selectedType
+    layers.value.points.visible,
+    layers.value.points.selectedType,
+    layers.value.lands.visible,
+    layers.value.lands.selectedType
   ],
   () => {
     if (props.activeBasemapId === '3d' && cesiumInitialized.value) {
-      loadPointsAndLands(props.layers);  // 传递最新的layers
+      loadPointsAndLands(layers.value);  // 传递最新的layers
     }
   }
 )

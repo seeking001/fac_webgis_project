@@ -88,4 +88,44 @@ onUnmounted(() => {
   left: 0;
   right: 0;
 }
+
+/* 地图控件位置 - OpenLayers 默认控件 */
+:deep(.ol-zoom) {
+  position: absolute;
+  left: 305px;
+  top: 5px;
+}
+
+:deep(.ol-rotate) {
+  position: absolute;
+  right: 305px;
+  top: 5px;
+}
+
+:deep(.ol-scale-line) {
+  position: absolute;
+  left: 305px;
+  bottom: 5px;
+  height: 20px;
+  background: rgba(0,0,0,0.1);
+}
+
+:deep(.ol-full-screen) {
+  position: absolute;
+  right: 305px;
+  top: 50px;
+}
+
+/* 鼠标位置坐标显示 */
+:deep(.custom-mouse-position) {
+  position: absolute;
+  right: 305px;
+  bottom: 5px;
+  height: 20px;
+  background: rgba(0,0,0,0.1);
+  font-size: 12px;
+  color: #333;
+  padding: 0 10px;
+  border-radius: 3px;
+}
 </style>

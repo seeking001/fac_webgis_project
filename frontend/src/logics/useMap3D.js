@@ -92,23 +92,9 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     });
 
     await loadBuildings();
-    await loadPointsAndLands();
+    await loadPointsAndLands(layers.value);
     await loadEducationSupplyData();
     setupCesiumClickHandler();
-
-    // cesiumWatcher = watch(
-    //   () => [
-    //     layers.points.visible,
-    //     layers.points.selectedType,
-    //     layers.lands.visible,
-    //     layers.lands.selectedType
-    //   ],
-    //   () => {
-    //     if (activeBasemapId.value === '3d') {
-    //       loadPointsAndLands();
-    //     }
-    //   }
-    // );
 
     cesiumInitialized.value = true;
   }
@@ -228,6 +214,8 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   }
 
   async function loadPointsAndLands(currentLayers = layers) {
+    const layersToUse = currentLayers || layers?.value || layers
+
     // 使用传入的 currentLayers 而不是闭包的 layers
     const pointsConfig = currentLayers.points;
     const landsConfig = currentLayers.lands;
@@ -306,6 +294,20 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
         });
         landEntities.push(entity);
       });
+    }
+  }
+
+  function toggleLayer(layerKey) {
+    const layerObj = layers.value[layerKey]
+    if (layerObj.visible && !layerObj.loaded) {
+      layerObj.loaded = true
+    }
+    loadPointsAndLands(layers.value)
+  }
+
+  function onTypeChange(layerKey) {
+    if (layers.value[layerKey].loaded) {
+      loadPointsAndLands(layers.value)
     }
   }
 
@@ -683,6 +685,8 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     viewer,
     cesiumInitialized,
     loadCesium,
+    toggleLayer,
+    onTypeChange,
     startFlythrough,
     handleAnalysisClick,
     loadPointsAndLands,

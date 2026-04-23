@@ -24,7 +24,7 @@
         <h4>三维展示</h4>
         <div class="control-group">
           <button @click="$emit('flythrough')" class="fly-btn">漫游飞行</button>
-          <button @click="$emit('analysis')" class="fly-btn">{{ analysisButtonText || '漫游分析' }}</button>
+          <button @click="$emit('analysis')" class="fly-btn">{{ analysisButtonText }}</button>
         </div>
       </div>
     </div>
@@ -47,7 +47,7 @@
           <span v-else>◻️ {{ config.name }}: 未加载</span>
         </div>
       </div>
-      
+
       <div class="operation-hint" v-if="vectorStore.isDrawing || vectorStore.showPointForm || vectorStore.showLandsForm || vectorStore.selectedFeature">
         <h4>操作提示</h4>
         <div class="hint-content">
@@ -63,10 +63,10 @@
         </div>
       </div>
     </div>
-    
+
     <!-- 要素弹窗 -->
-    <div v-if="vectorStore.selectedFeature && vectorStore.popupPosition" 
-          :style="{left: vectorStore.popupPosition.x + 'px', top: vectorStore.popupPosition.y + 'px'}" 
+    <div v-if="vectorStore.selectedFeature && vectorStore.popupPosition"
+          :style="{left: vectorStore.popupPosition.x + 'px', top: vectorStore.popupPosition.y + 'px'}"
           class="feature-popup">
       <div class="popup-content">
         <button @click="vectorStore.closePopup" class="close-btn">x</button>
@@ -204,46 +204,33 @@ import { useVectorStore } from '@/stores/vectorStore'
 import { useFeature } from '@/logics/useFeature'
 
 const props = defineProps({
-  map: {
-    type: Object,
-    required: true
-  },
-  layers: {
-    type: Object,
-    required: true
-  },
-  updateVectorLayer: {
-    type: Function,
-    required: true
-  },
-  getPointModify: {
-    type: Function,
-    required: true
-  },
-  getLandsModify: {
-    type: Function,
-    required: true
-  },
-  clearHighlight: {
-    type: Function,
-    required: true
-  },
-  analysisButtonText: {
-    type: String,
-    default: '漫游分析'
-  }
+  map2DRef: { type: Object, default: null },
+  map3DRef: { type: Object, default: null },
+  analysisButtonText: { type: String, default: '漫游分析' },
+  activeBasemapId: { type: String, required: true }
 })
 
-const emit = defineEmits(['flythrough', 'analysis', 'toggleLayer', 'typeChange'])
+const emit = defineEmits(['flythrough', 'analysis'])
 
 const vectorStore = useVectorStore()
 
-// 要素操作逻辑
+// 从 map2DRef 中获取所需的数据和方法
+const map2D = computed(() => props.map2DRef)
+const mapInstance = computed(() => map2D.value?.map)
+// 根据当前模式动态获取 layers
+const layers = computed(() => {
+  if (props.activeBasemapId === '3d') {
+    return props.map3DRef?.layers || { points: {}, lands: {} }
+  } else {
+    return props.map2DRef?.layers || { points: {}, lands: {} }
+  }
+})
+
+// 使用要素操作逻辑
 const {
   startDrawing,
   cancelDraw,
   toggleEditMode,
-  exitEditMode,
   savePointToDatabase,
   saveLandsToDatabase,
   deleteFeature,
@@ -252,25 +239,34 @@ const {
   exportSingleFeature,
   calcArea
 } = useFeature(
-  props.map,
-  props.layers,
-  props.updateVectorLayer,
-  props.getPointModify,
-  props.getLandsModify,
-  props.clearHighlight
+  mapInstance,
+  layers,
+  map2D.value?.updateVectorLayer,
+  map2D.value?.getPointModify,
+  map2D.value?.getLandsModify,
+  map2D.value?.clearHighlight
 )
 
 // 计算属性
 const pointsCount = computed(() => vectorStore.points.length)
 const landsCount = computed(() => vectorStore.lands.length)
 
-// 图层操作方法（直接调用父组件传入的方法）
+// 图层操作（调用 map2DRef 和 map3DRef 的方法）
 const toggleLayer = (key) => {
-  emit('toggleLayer', key)
+  // 根据当前激活的地图类型调用对应的方法
+  if (props.activeBasemapId === '3d') {
+    props.map3DRef?.toggleLayer(key)
+  } else {
+    props.map2DRef?.toggleLayer(key)
+  }
 }
 
 const onTypeChange = (key) => {
-  emit('typeChange', key)
+  if (props.activeBasemapId === '3d') {
+    props.map3DRef?.onTypeChange(key)
+  } else {
+    props.map2DRef?.onTypeChange(key)
+  }
 }
 </script>
 
