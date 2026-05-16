@@ -1,6 +1,5 @@
 // backend/src/models/AnalysisModel.js
-
-const db = require('../config/database')
+const { pool } = require('../config/database')
 const spatialHelper = require('../utils/spatialHelper')
 
 /**
@@ -12,11 +11,10 @@ const spatialHelper = require('../utils/spatialHelper')
  * 4. 根据居住用地面积估算人口和学位需求
  * 5. 计算供需比和状态
  */
-async function getEducationSupplyDemand() {
+async function getEducationSupply() {
   try {
     const query = `
       WITH 
-      -- 1. 教育设施基础数据
       education_facilities AS (
         SELECT 
           id,
@@ -25,31 +23,37 @@ async function getEducationSupplyDemand() {
           level,
           scale,
           floor_area,
-          ST_AsGeoJSON(geometry)::json AS geometry,
-          ST_X(ST_Centroid(geometry)) AS lng,
-          ST_Y(ST_Centroid(geometry)) AS lat
+          geom,
+          ST_X(ST_Centroid(geom)) AS lng,
+          ST_Y(ST_Centroid(geom)) AS lat
         FROM points 
         WHERE type IN ('幼儿园', '小学', '初中', '九年一贯制学校')
-          AND geometry IS NOT NULL
+          AND geom IS NOT NULL
       ),
       
-      -- 2. 居住用地数据
       residential_lands AS (
         SELECT 
           id,
           name,
           type,
-          ${spatialHelper.area('geometry')} AS site_area,
-          geometry
+          geom,
+          ${spatialHelper.area('geom')} AS site_area
         FROM lands 
         WHERE type = '居住用地'
-          AND geometry IS NOT NULL
+          AND geom IS NOT NULL
       ),
       
-      -- 3. 计算每个设施的服务半径
       facility_with_buffer AS (
         SELECT 
-          f.*,
+          f.id,
+          f.name,
+          f.type,
+          f.level,
+          f.scale,
+          f.floor_area,
+          f.geom,
+          f.lng,
+          f.lat,
           CASE 
             WHEN f.type = '幼儿园' THEN 300
             WHEN f.type = '小学' THEN 500
@@ -57,7 +61,7 @@ async function getEducationSupplyDemand() {
             WHEN f.type = '九年一贯制学校' THEN 1000
             ELSE 500
           END AS service_radius,
-          ${spatialHelper.buffer('f.geometry',
+          ${spatialHelper.buffer('f.geom',
       `CASE 
               WHEN f.type = '幼儿园' THEN 300
               WHEN f.type = '小学' THEN 500
@@ -69,20 +73,28 @@ async function getEducationSupplyDemand() {
         FROM education_facilities f
       ),
       
-      -- 4. 计算每个设施服务范围内的居住用地
       facility_coverage AS (
         SELECT 
-          fb.*,
+          fb.id,
+          fb.name,
+          fb.type,
+          fb.level,
+          fb.scale,
+          fb.floor_area,
+          fb.geom,
+          fb.lng,
+          fb.lat,
+          fb.service_radius,
+          fb.buffer_geom,
           COALESCE(SUM(rl.site_area), 0) AS covered_residential_area,
           COUNT(rl.id) AS covered_land_count
         FROM facility_with_buffer fb
         LEFT JOIN residential_lands rl 
-          ON ${spatialHelper.intersects('fb.buffer_geom', 'rl.geometry')}
+          ON ${spatialHelper.intersects('fb.buffer_geom', 'rl.geom')}
         GROUP BY fb.id, fb.name, fb.type, fb.level, fb.scale, fb.floor_area, 
-                 fb.geometry, fb.lng, fb.lat, fb.service_radius, fb.buffer_geom
+                 fb.geom, fb.lng, fb.lat, fb.service_radius, fb.buffer_geom
       )
       
-      -- 5. 计算人口和学位需求，以及供需比
       SELECT 
         id,
         name,
@@ -90,46 +102,79 @@ async function getEducationSupplyDemand() {
         level,
         scale AS supply_capacity,
         covered_residential_area,
-        -- 估算人口：按容积率 2.0，人均居住面积 35 平米计算
-        ROUND(covered_residential_area * 2.0 / 35) AS estimated_population,
-        -- 估算学位需求
+        ROUND((covered_residential_area * 2.0 / 35)::numeric, 0)::integer AS estimated_population,
         ROUND(
-          CASE 
+          (CASE 
             WHEN type = '幼儿园' THEN covered_residential_area * 2.0 / 35 * 0.03
             WHEN type = '小学' THEN covered_residential_area * 2.0 / 35 * 0.06
             WHEN type = '初中' THEN covered_residential_area * 2.0 / 35 * 0.03
             WHEN type = '九年一贯制学校' THEN covered_residential_area * 2.0 / 35 * 0.09
             ELSE 0
-          END
-        ) AS estimated_demand,
-        -- 供需比
+          END)::numeric, 0
+        )::integer AS estimated_demand,
         CASE 
-          WHEN estimated_demand > 0 THEN ROUND(scale::numeric / estimated_demand, 2)
+          WHEN (CASE 
+            WHEN type = '幼儿园' THEN covered_residential_area * 2.0 / 35 * 0.03
+            WHEN type = '小学' THEN covered_residential_area * 2.0 / 35 * 0.06
+            WHEN type = '初中' THEN covered_residential_area * 2.0 / 35 * 0.03
+            WHEN type = '九年一贯制学校' THEN covered_residential_area * 2.0 / 35 * 0.09
+            ELSE 0
+          END) > 0 
+          THEN ROUND((scale::numeric / (CASE 
+            WHEN type = '幼儿园' THEN covered_residential_area * 2.0 / 35 * 0.03
+            WHEN type = '小学' THEN covered_residential_area * 2.0 / 35 * 0.06
+            WHEN type = '初中' THEN covered_residential_area * 2.0 / 35 * 0.03
+            WHEN type = '九年一贯制学校' THEN covered_residential_area * 2.0 / 35 * 0.09
+            ELSE 0
+          END)::numeric)::numeric, 2)
           ELSE NULL
         END AS supply_demand_ratio,
-        -- 状态
         CASE 
-          WHEN estimated_demand = 0 THEN 'no_data'
-          WHEN scale::numeric / estimated_demand >= 1.2 THEN 'sufficient'
-          WHEN scale::numeric / estimated_demand >= 0.8 THEN 'balanced'
+          WHEN covered_residential_area = 0 THEN 'no_data'
+          WHEN scale::numeric / NULLIF(CASE 
+            WHEN type = '幼儿园' THEN covered_residential_area * 2.0 / 35 * 0.03
+            WHEN type = '小学' THEN covered_residential_area * 2.0 / 35 * 0.06
+            WHEN type = '初中' THEN covered_residential_area * 2.0 / 35 * 0.03
+            WHEN type = '九年一贯制学校' THEN covered_residential_area * 2.0 / 35 * 0.09
+            ELSE 0
+          END, 0)::numeric >= 1.2 THEN 'sufficient'
+          WHEN scale::numeric / NULLIF(CASE 
+            WHEN type = '幼儿园' THEN covered_residential_area * 2.0 / 35 * 0.03
+            WHEN type = '小学' THEN covered_residential_area * 2.0 / 35 * 0.06
+            WHEN type = '初中' THEN covered_residential_area * 2.0 / 35 * 0.03
+            WHEN type = '九年一贯制学校' THEN covered_residential_area * 2.0 / 35 * 0.09
+            ELSE 0
+          END, 0)::numeric >= 0.8 THEN 'balanced'
           ELSE 'insufficient'
         END AS status,
         service_radius,
         lng,
         lat,
-        geometry
+        ST_AsGeoJSON(geom)::json AS geometry
       FROM facility_coverage
       ORDER BY 
         CASE 
-          WHEN status = 'insufficient' THEN 1
-          WHEN status = 'balanced' THEN 2
-          WHEN status = 'sufficient' THEN 3
-          ELSE 4
+          WHEN covered_residential_area = 0 THEN 4
+          WHEN scale::numeric / NULLIF(CASE 
+            WHEN type = '幼儿园' THEN covered_residential_area * 2.0 / 35 * 0.03
+            WHEN type = '小学' THEN covered_residential_area * 2.0 / 35 * 0.06
+            WHEN type = '初中' THEN covered_residential_area * 2.0 / 35 * 0.03
+            WHEN type = '九年一贯制学校' THEN covered_residential_area * 2.0 / 35 * 0.09
+            ELSE 0
+          END, 0)::numeric >= 1.2 THEN 3
+          WHEN scale::numeric / NULLIF(CASE 
+            WHEN type = '幼儿园' THEN covered_residential_area * 2.0 / 35 * 0.03
+            WHEN type = '小学' THEN covered_residential_area * 2.0 / 35 * 0.06
+            WHEN type = '初中' THEN covered_residential_area * 2.0 / 35 * 0.03
+            WHEN type = '九年一贯制学校' THEN covered_residential_area * 2.0 / 35 * 0.09
+            ELSE 0
+          END, 0)::numeric >= 0.8 THEN 2
+          ELSE 1
         END,
-        supply_demand_ratio ASC
+        supply_demand_ratio ASC NULLS LAST
     `
 
-    const result = await db.query(query)
+    const result = await pool.query(query)
     return result.rows
 
   } catch (error) {
@@ -154,8 +199,8 @@ async function getFacilityServiceArea(facilityId, facilityType, radius = 500) {
           id,
           name,
           type,
-          geometry,
-          ${spatialHelper.buffer('geometry', radius)} AS buffer_geom
+          geom,
+          ${spatialHelper.buffer('geom', radius)} AS buffer_geom
         FROM ${tableName}
         WHERE id = $1
       ),
@@ -166,18 +211,18 @@ async function getFacilityServiceArea(facilityId, facilityType, radius = 500) {
           b.type,
           b.up_floor,
           b.height,
-          ${spatialHelper.asGeoJSON('b.geometry')} AS geometry,
-          ${spatialHelper.geographyDistance('f.geometry', 'b.geometry')} AS distance
+          ${spatialHelper.asGeoJSON('b.geom')} AS geometry,
+          ${spatialHelper.geographyDistance('f.geom', 'b.geom')} AS distance
         FROM buildings b
         CROSS JOIN facility f
-        WHERE ${spatialHelper.intersects('f.buffer_geom', 'b.geometry')}
+        WHERE ${spatialHelper.intersects('f.buffer_geom', 'b.geom')}
         ORDER BY distance ASC
       )
       SELECT 
         f.id,
         f.name,
         f.type,
-        ${spatialHelper.asGeoJSON('f.geometry')} AS geometry,
+        ${spatialHelper.asGeoJSON('f.geom')} AS geometry,
         ${spatialHelper.asGeoJSON('f.buffer_geom')} AS buffer_geometry,
         radius AS service_radius,
         COALESCE(
@@ -197,10 +242,10 @@ async function getFacilityServiceArea(facilityId, facilityType, radius = 500) {
         ) AS covered_buildings
       FROM facility f
       LEFT JOIN covered_buildings cb ON true
-      GROUP BY f.id, f.name, f.type, f.geometry, f.buffer_geom
+      GROUP BY f.id, f.name, f.type, f.geom, f.buffer_geom
     `
 
-    const result = await db.query(query, [facilityId])
+    const result = await pool.query(query, [facilityId])
     return result.rows[0] || null
 
   } catch (error) {
@@ -220,14 +265,14 @@ async function getDistanceBetweenFacilities(facilityId1, facilityId2) {
       SELECT 
         p1.name AS facility1,
         p2.name AS facility2,
-        ${spatialHelper.geographyDistance('p1.geometry', 'p2.geometry')} AS distance_meters,
-        ROUND(${spatialHelper.geographyDistance('p1.geometry', 'p2.geometry')} / 1000::numeric, 2) AS distance_km
+        ${spatialHelper.geographyDistance('p1.geom', 'p2.geom')} AS distance_meters,
+        ROUND(${spatialHelper.geographyDistance('p1.geom', 'p2.geom')} / 1000::numeric, 2) AS distance_km
       FROM points p1
       CROSS JOIN points p2
       WHERE p1.id = $1 AND p2.id = $2
     `
 
-    const result = await db.query(query, [facilityId1, facilityId2])
+    const result = await pool.query(query, [facilityId1, facilityId2])
     return result.rows[0] || null
 
   } catch (error) {
@@ -260,14 +305,14 @@ async function getFacilityHeatmap(minLng, minLat, maxLng, maxLat, facilityType =
         id,
         name,
         type,
-        ST_X(geometry) AS lng,
-        ST_Y(geometry) AS lat
+        ST_X(geom) AS lng,
+        ST_Y(geom) AS lat
       FROM points
-      WHERE ${spatialHelper.intersects(bbox, 'geometry')}
+      WHERE ${spatialHelper.intersects(bbox, 'geom')}
         ${typeCondition}
     `
 
-    const result = await db.query(query, params)
+    const result = await pool.query(query, params)
     return result.rows
 
   } catch (error) {
@@ -277,7 +322,7 @@ async function getFacilityHeatmap(minLng, minLat, maxLng, maxLat, facilityType =
 }
 
 module.exports = {
-  getEducationSupplyDemand,
+  getEducationSupply,
   getFacilityServiceArea,
   getDistanceBetweenFacilities,
   getFacilityHeatmap

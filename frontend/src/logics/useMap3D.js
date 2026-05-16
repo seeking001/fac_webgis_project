@@ -422,6 +422,13 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   async function showAnalysisForFacility(fac) {
     clearAnalysisGraphics();
 
+    // 检查坐标有效性
+    if (fac.lng == null || fac.lat == null || isNaN(fac.lng) || isNaN(fac.lat)) {
+      console.warn('设施坐标无效，跳过可视化:', fac.name)
+      showSupplyDemandPanel(fac)
+      return
+    }
+
     let radius = 0;
     if (fac.type === '幼儿园') radius = 300;
     else if (fac.type === '小学') radius = 500;
@@ -433,10 +440,13 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     const minScale = 0;
     const maxScale = 6000;
 
-    let actualHeight = minHeight + (fac.scale - minScale) / (maxScale - minScale) * (maxHeight - minHeight);
+    const supply = fac.supply_capacity || fac.scale || 0
+    const demand = fac.estimated_demand || fac.demand || 0
+
+    let actualHeight = minHeight + (supply - minScale) / (maxScale - minScale) * (maxHeight - minHeight);
     actualHeight = Math.min(maxHeight, Math.max(minHeight, actualHeight));
 
-    let demandHeight = minHeight + (fac.demand - minScale) / (maxScale - minScale) * (maxHeight - minHeight);
+    let demandHeight = minHeight + (demand - minScale) / (maxScale - minScale) * (maxHeight - minHeight);
     demandHeight = Math.min(maxHeight, Math.max(minHeight, demandHeight));
 
     let color = '#808080';
@@ -444,7 +454,7 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     else if (fac.status === 'balanced') color = '#ffc107';
     else if (fac.status === 'insufficient') color = '#f44336';
 
-    drawDualColorColumn(fac.lng, fac.lat, actualHeight, demandHeight, fac.scale, fac.demand, fac.name, analysisEntities);
+    drawDualColorColumn(fac.lng, fac.lat, actualHeight, demandHeight, supply, demand, fac.name, analysisEntities);
     drawServiceRadius(Cesium, viewer.value, fac.lng, fac.lat, radius, color, analysisEntities);
 
     showSupplyDemandPanel(fac);
@@ -511,21 +521,24 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     if (!fac || fac.status === 'no_data') {
       html = '<p style="color: #aaa; text-align: center;">暂无数据</p>';
     } else {
+      const supply = fac.supply_capacity || fac.scale || 0
+      const demand = fac.estimated_demand || 0
+      const population = fac.estimated_population || 0
+      const ratio = fac.supply_demand_ratio
+
       html = `<p class="school-name">${fac.name}</p>`;
       html += `<p><strong>学校类型：</strong> ${fac.type}</p>`;
-      html += `<p><strong>实际学位：</strong> ${fac.scale} 个</p>`;
-      html += `<p><strong>覆盖人口：</strong> ${fac.population.toLocaleString()} 人</p>`;
+      html += `<p><strong>实际学位：</strong> ${supply} 个</p>`;
+      html += `<p><strong>覆盖人口：</strong> ${population.toLocaleString()} 人</p>`;
 
       if (fac.type === '九年一贯制学校') {
-        html += `<p><strong>小学需求：</strong> ${fac.demandPrimary || 0} 学位</p>`;
-        html += `<p><strong>初中需求：</strong> ${fac.demandJunior || 0} 学位</p>`;
-        html += `<p><strong>总需求：</strong> ${fac.demand} 学位</p>`;
+        html += `<p><strong>总需求：</strong> ${demand} 学位</p>`;
       } else {
-        html += `<p><strong>需求学位：</strong> ${fac.demand} 个</p>`;
+        html += `<p><strong>需求学位：</strong> ${demand} 个</p>`;
       }
 
-      const ratioColor = fac.supplyRatio >= 1.1 ? '#4caf50' : (fac.supplyRatio >= 0.9 ? '#ffc107' : '#f44336');
-      html += `<p><strong>供需比：</strong> <span style="color: ${ratioColor}; font-weight: bold;">${fac.supplyRatio || '-'}</span></p>`;
+      const ratioColor = ratio >= 1.1 ? '#4caf50' : (ratio >= 0.9 ? '#ffc107' : '#f44336');
+      html += `<p><strong>供需比：</strong> <span style="color: ${ratioColor}; font-weight: bold;">${ratio || '-'}</span></p>`;
 
       let statusText = '';
       if (fac.status === 'sufficient') statusText = '充足 ✅';
