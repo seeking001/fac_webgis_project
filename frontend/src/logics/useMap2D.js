@@ -53,10 +53,15 @@ const LAND_STYLES = {
   '社会福利用地': 'rgba(254, 24, 201, 0.6)'
 }
 
+// Style 缓存（模块级，只在文件加载时创建一次）
+const POINT_STYLE_CACHE = new Map();
+const LAND_STYLE_CACHE = new Map();
+
 // 导出二维地图
 export function useMap2D(mapContainer, basemaps) {
   // 地图实例
   const map = ref(null)
+
   // 矢量图层配置
   const layers = ref({
     points: {
@@ -178,17 +183,32 @@ export function useMap2D(mapContainer, basemaps) {
 
   // ==================== 样式函数 ====================
   function createPointsStyle(feature) {
-    const icon = POINT_STYLES[feature.get('type')] || '📍'
-    const name = feature.get('name') || ''
-    return [
+    const type = feature.get('type');
+    if (POINT_STYLE_CACHE[type]) {
+      return POINT_STYLE_CACHE[type];
+    }
+    const icon = POINT_STYLES[type] || '📍';
+    const name = feature.get('name') || '';
+    const styles = [
       new Style({ text: new Text({ text: icon, font: 'bold 16px Arial' }) }),
       new Style({ text: new Text({ text: name, font: '14px Arial', textAlign: 'left', offsetX: 12, textBaseline: 'middle', stroke: new Stroke({ color: '#fff', width: 1 }) }) })
-    ]
+    ];
+    POINT_STYLE_CACHE[type] = styles;;
+    return styles;
   }
 
   function createLandsStyle(feature) {
-    const color = LAND_STYLES[feature.get('type')] || 'rgba(0, 0, 0, 0.6)'
-    return new Style({ fill: new Fill({ color }), stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.2)', width: 1.5 }) })
+    const type = feature.get('type');
+    if (LAND_STYLE_CACHE[type]) {
+      return LAND_STYLE_CACHE[type];
+    }
+    const color = LAND_STYLES[type] || 'rgba(0, 0, 0, 0.6)';
+    const style = new Style({
+      fill: new Fill({ color }),
+      stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.2)', width: 1.5 })
+    });
+    LAND_STYLE_CACHE[type] = style;
+    return style;
   }
 
   // 高亮样式函数

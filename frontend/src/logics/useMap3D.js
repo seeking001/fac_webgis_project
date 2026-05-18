@@ -26,6 +26,7 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   let cesiumPopupDiv = null;
   let cesiumWatcher = null;
   let lastHighlighted = null;
+  let buildingDataMap = {};  // 用于存储建筑数据以支持点击拾取显示属性
 
   let Cesium = null;
   let cesiumPopupCloseBtn = null;
@@ -125,7 +126,14 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
         lastHighlighted = null;
       }
 
-      if (Cesium.defined(pick) && pick.id) {
+      // 先判断：是不是点到了建筑 Primitive？
+      if (Cesium.defined(pick) && pick.primitive && typeof pick.id === 'number') {
+        const props = buildingDataMap[pick.id];
+        if (props) {
+          showCesiumPopup(props, click.position);
+        }
+
+      } else if (Cesium.defined(pick) && pick.id) {
         const entity = pick.id;
         lastHighlighted = entity;
 
@@ -175,126 +183,183 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   }
 
   async function loadBuildings() {
-    try {
-      const response = await fetch('http://localhost:3000/api/buildings');
-      const result = await response.json();
+    const response = await fetch('http://localhost:3000/api/buildings');
+    const result = await response.json();
 
-      buildingDataSource.value = await Cesium.GeoJsonDataSource.load(result.data, {
-        stroke: Cesium.Color.TRANSPARENT,
-        fill: Cesium.Color.fromCssColorString('rgba(200,200,200,0.6)')
+    const instances = [];
+    buildingDataMap = {};  // 重置建筑数据映射
+
+    result.data.features.forEach((feature, index) => {
+      const props = feature.properties;
+
+      // 跳过没有几何数据的要素
+      if (!feature.geometry || !feature.geometry.coordinates) return;
+
+      let height = props.height || (props.up_floor ? props.up_floor * 3 : 10);
+      const color = buildingColors[props.type] || defaultBuildingColor;
+      const cesiumColor = Cesium.Color.fromCssColorString(color);
+
+      // 兼容 Polygon 和 MultiPolygon，取第一个外环
+      let outerRing;
+      if (feature.geometry.type === 'MultiPolygon') {
+        outerRing = feature.geometry.coordinates[0][0];
+      } else {
+        outerRing = feature.geometry.coordinates[0];
+      }
+      const positions = outerRing.flatMap(c => [c[0], c[1]]);
+
+      const geometry = new Cesium.PolygonGeometry({
+        polygonHierarchy: new Cesium.PolygonHierarchy(
+          Cesium.Cartesian3.fromDegreesArray(positions)
+        ),
+        extrudedHeight: height,
+        perPositionHeight: false,
+        vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT
       });
 
-      const entities = buildingDataSource.value.entities.values;
-      for (let i = 0; i < entities.length; i++) {
-        const entity = entities[i];
-        const properties = entity.properties;
-
-        let height = properties?.height?.getValue();
-        if (!height || height === 0) {
-          const upFloor = properties?.up_floor?.getValue();
-          height = upFloor ? upFloor * 3 : 10;
+      instances.push(new Cesium.GeometryInstance({
+        geometry: geometry,
+        id: index,
+        attributes: {
+          color: Cesium.ColorGeometryInstanceAttribute.fromColor(cesiumColor)
         }
+      }));
 
-        const type = entity.properties?.type?.getValue();
-        const color = buildingColors[type] || defaultBuildingColor;
+      buildingDataMap[index] = props;
+    });
 
-        if (entity.polygon) {
-          entity.polygon.material = Cesium.Color.fromCssColorString(color);
-          entity.polygon.extrudedHeight = height;
-          entity.polygon.height = 0;
-          entity.polygon.heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
-          entity.polygon.extrudedHeightReference = Cesium.HeightReference.RELATIVE_TO_GROUND;
-        }
-      }
+    const primitive = new Cesium.Primitive({
+      geometryInstances: instances,
+      appearance: new Cesium.PerInstanceColorAppearance({
+        closed: true,
+        translucent: true
+      }),
+      asynchronous: false  // 确保立即可见
+    });
 
-      viewer.value.dataSources.add(buildingDataSource.value);
-    } catch (error) {
-      console.error('加载建筑失败', error);
-    }
+    viewer.value.scene.primitives.add(primitive);
   }
 
-  async function loadPointsAndLands(currentLayers = layers) {
-    const layersToUse = currentLayers || layers?.value || layers
+  // ==================== 实体创建辅助函数 ====================
+  function createPointEntity(point) {
+    const [lng, lat] = point.geometry.coordinates;
+    const entity = viewer.value.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+      billboard: {
+        image: getPointIcon(point.type),
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+        scale: 0.8,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+      },
+      label: {
+        text: point.name,
+        font: '14px "Microsoft YaHei", Arial, sans-serif',
+        pixelOffset: new Cesium.Cartesian2(15, -2),
+        fillColor: Cesium.Color.BLACK,
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+      },
+      properties: point
+    });
+    entity._dataId = point.id;
+    return entity;
+  }
 
-    // 使用传入的 currentLayers 而不是闭包的 layers
-    const pointsConfig = currentLayers.points;
-    const landsConfig = currentLayers.lands;
+  function createLandEntity(land) {
+    const hierarchy = new Cesium.PolygonHierarchy(
+      land.geometry.coordinates[0].map(coord =>
+        Cesium.Cartesian3.fromDegrees(coord[0], coord[1])
+      ),
+      land.geometry.coordinates.slice(1).map(ring =>
+        ring.map(coord => Cesium.Cartesian3.fromDegrees(coord[0], coord[1]))
+      )
+    );
+    const entity = viewer.value.entities.add({
+      polygon: {
+        hierarchy: hierarchy,
+        material: Cesium.Color.fromCssColorString(
+          LAND_STYLES[land.type] || 'rgba(0,0,0,0.5)'
+        ),
+        outline: true,
+        outlineColor: Cesium.Color.WHITE
+      },
+      properties: land
+    });
+    entity._dataId = land.id;
+    return entity;
+  }
 
-    // 清除旧数据
-    pointEntities.forEach(e => viewer.value.entities.remove(e));
-    landEntities.forEach(e => viewer.value.entities.remove(e));
-    pointEntities = [];
-    landEntities = [];
+  async function loadPointsAndLands(currentLayers) {
+    const layersToUse = currentLayers || layers?.value || layers;
+    const pointsConfig = layersToUse.points;
+    const landsConfig = layersToUse.lands;
 
-    if (vectorStore.points.length === 0) {
-      await vectorStore.loadPoints();
-    }
-    if (vectorStore.lands.length === 0) {
-      await vectorStore.loadLands();
-    }
+    // 确保数据已加载（只加载一次）
+    if (vectorStore.points.length === 0) await vectorStore.loadPoints();
+    if (vectorStore.lands.length === 0) await vectorStore.loadLands();
 
+    // ========== 增量更新点要素 ==========
+
+    // 计算当前筛选后的点集合
+    let filteredPoints = [];
     if (pointsConfig.visible) {
-      let filteredPoints = vectorStore.points;
-      if (pointsConfig.selectedType !== '全部类型') {
-        filteredPoints = filteredPoints.filter(p => p.type === pointsConfig.selectedType);
-      }
-
-      filteredPoints.forEach(point => {
-        const [lng, lat] = point.geometry.coordinates;
-        const entity = viewer.value.entities.add({
-          position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
-          billboard: {
-            image: getPointIcon(point.type),
-            verticalOrigin: Cesium.VerticalOrigin.CENTER,
-            horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-            scale: 0.8,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
-          },
-          label: {
-            text: point.name,
-            font: '14px "Microsoft YaHei", Arial, sans-serif',
-            pixelOffset: new Cesium.Cartesian2(15, -2),
-            fillColor: Cesium.Color.BLACK,
-            outlineColor: Cesium.Color.WHITE,
-            outlineWidth: 2,
-            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-            verticalOrigin: Cesium.VerticalOrigin.CENTER,
-            horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
-          },
-          properties: point
-        });
-        pointEntities.push(entity);
-      });
+      filteredPoints = pointsConfig.selectedType === '全部类型'
+        ? vectorStore.points
+        : vectorStore.points.filter(p => p.type === pointsConfig.selectedType);
     }
 
+    const newPointIds = new Set(filteredPoints.map(p => p.id));
+
+    // 移除不再显示的实体
+    for (let i = pointEntities.length - 1; i >= 0; i--) {
+      if (!newPointIds.has(pointEntities[i]._dataId)) {
+        viewer.value.entities.remove(pointEntities[i]);
+        pointEntities.splice(i, 1);
+      }
+    }
+
+    // 添加新增的实体
+    const existingPointIds = new Set(pointEntities.map(e => e._dataId));
+    filteredPoints.forEach(point => {
+      if (!existingPointIds.has(point.id)) {
+        pointEntities.push(createPointEntity(point));
+      }
+    });
+
+    // ========== 增量更新面要素 ==========
+
+    // 计算当前筛选后的面集合
+    let filteredLands = [];
     if (landsConfig.visible) {
-      let filteredLands = vectorStore.lands;
-      if (landsConfig.selectedType !== '全部类型') {
-        filteredLands = filteredLands.filter(l => l.type === landsConfig.selectedType);
-      }
-
-      filteredLands.forEach(land => {
-        const hierarchy = new Cesium.PolygonHierarchy(
-          land.geometry.coordinates[0].map(coord => Cesium.Cartesian3.fromDegrees(coord[0], coord[1])),
-          land.geometry.coordinates.slice(1).map(ring =>
-            ring.map(coord => Cesium.Cartesian3.fromDegrees(coord[0], coord[1]))
-          )
-        );
-        const entity = viewer.value.entities.add({
-          polygon: {
-            hierarchy: hierarchy,
-            material: Cesium.Color.fromCssColorString(LAND_STYLES[land.type] || 'rgba(0,0,0,0.5)'),
-            outline: true,
-            outlineColor: Cesium.Color.WHITE
-          },
-          properties: land
-        });
-        landEntities.push(entity);
-      });
+      filteredLands = landsConfig.selectedType === '全部类型'
+        ? vectorStore.lands
+        : vectorStore.lands.filter(l => l.type === landsConfig.selectedType);
     }
+
+    const newLandIds = new Set(filteredLands.map(l => l.id));
+
+    // 移除不再显示的实体
+    for (let i = landEntities.length - 1; i >= 0; i--) {
+      if (!newLandIds.has(landEntities[i]._dataId)) {
+        viewer.value.entities.remove(landEntities[i]);
+        landEntities.splice(i, 1);
+      }
+    }
+
+    // 添加新增的实体
+    const existingLandIds = new Set(landEntities.map(e => e._dataId));
+    filteredLands.forEach(land => {
+      if (!existingLandIds.has(land.id)) {
+        landEntities.push(createLandEntity(land));
+      }
+    });
   }
 
   function toggleLayer(layerKey) {
