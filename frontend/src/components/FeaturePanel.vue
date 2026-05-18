@@ -23,6 +23,7 @@
       <div class="layer-panel">
         <h4>三维展示</h4>
         <div class="control-group">
+          <button @click="$emit('resetview')" class="fly-btn">初始视角</button>
           <button @click="$emit('flythrough')" class="fly-btn">漫游飞行</button>
           <button @click="$emit('analysis')" class="fly-btn">{{ analysisButtonText }}</button>
         </div>
@@ -45,6 +46,16 @@
         <div v-for="(config, key) in layers" :key="key">
           <span v-if="config.loaded">✅ {{ config.name }}: {{ key === 'points' ? pointsCount : landsCount }} 个</span>
           <span v-else>◻️ {{ config.name }}: 未加载</span>
+        </div>
+      </div>
+
+      <!-- 规划达标仪表盘 -->
+      <div class="dashboard-panel" v-if="dashboardData.length">
+        <h4>规划达标仪表盘</h4>
+        <div v-for="item in dashboardData" :key="item.type" :class="['dash-item', item.status]">
+          <span class="dash-label">{{ item.label }}</span>
+          <span class="dash-value">{{ item.value }}%</span>
+          <span class="dash-icon">{{ item.icon }}</span>
         </div>
       </div>
 
@@ -250,6 +261,60 @@ const {
 // 计算属性
 const pointsCount = computed(() => vectorStore.points.length)
 const landsCount = computed(() => vectorStore.lands.length)
+
+// 球面距离计算（米）
+function haversine(lng1, lat1, lng2, lat2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// 规划达标仪表盘
+const dashboardData = computed(() => {
+  const points = vectorStore.points;
+  const lands = vectorStore.lands.filter(l => l.type === '居住用地');
+  if (!points.length || !lands.length) return [];
+
+  // 获取居住用地质心
+  const landCenters = lands.map(l => {
+    const ring = l.geometry.coordinates[0];
+    const n = ring.length;
+    const sum = ring.reduce((a, c) => [a[0] + c[0] / n, a[1] + c[1] / n], [0, 0]);
+    return { center: sum, area: l.site_area || 0 };
+  });
+
+  const metrics = [
+    { types: ['幼儿园'], radius: 300, target: 0.9, label: '幼儿园300m' },
+    { types: ['小学', '九年一贯制学校'], radius: 500, target: 0.9, label: '小学500m' },
+    { types: ['初中', '九年一贯制学校'], radius: 1000, target: 0.9, label: '初中1000m' }
+  ];
+
+  return metrics.map(m => {
+    const facs = points.filter(p => m.types.includes(p.type));
+    if (!facs.length) return { ...m, value: 0, status: 'no_data', icon: '—' };
+
+    const covered = landCenters.reduce((sum, lc) => {
+      const ok = facs.some(f =>
+        haversine(f.geometry.coordinates[0], f.geometry.coordinates[1], lc.center[0], lc.center[1]) <= m.radius
+      );
+      return sum + (ok ? lc.area : 0);
+    }, 0);
+
+    const total = landCenters.reduce((s, lc) => s + lc.area, 0);
+    const rate = total > 0 ? covered / total : 0;
+    const pct = Math.round(rate * 100);
+
+    let status, icon;
+    if (rate >= m.target) { status = 'ok'; icon = '✅'; }
+    else if (rate >= m.target * 0.8) { status = 'warn'; icon = '⚠️'; }
+    else { status = 'fail'; icon = '❌'; }
+
+    return { ...m, value: pct, status, icon };
+  });
+});
 
 // 图层操作（调用 map2DRef 和 map3DRef 的方法）
 const toggleLayer = (key) => {
@@ -626,4 +691,38 @@ const onTypeChange = (key) => {
   background: #409eff;
   color: white;
 }
+
+/* 规划达标仪表盘 */
+.dashboard-panel {
+  margin: 5px 10px;
+  padding: 5px;
+  background: rgba(0, 0, 30, 0.4);
+  border-radius: 8px;
+}
+
+.dashboard-panel h4 {
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  color: #b3c6ff;
+  font-size: 16px;
+  text-align: center;
+}
+
+.dash-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  margin: 4px 0;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.dash-item.ok  { background: rgba(76, 175, 80, 0.25); }
+.dash-item.warn { background: rgba(255, 193, 7, 0.25); }
+.dash-item.fail { background: rgba(244, 67, 54, 0.25); }
+.dash-item.no_data { background: rgba(100, 100, 100, 0.2); }
+
+.dash-label { flex: 1; color: #eee; }
+.dash-value { color: #fff; font-weight: bold; margin-right: 6px; }
+.dash-icon  { width: 20px; text-align: center; }
 </style>

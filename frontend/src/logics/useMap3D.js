@@ -16,6 +16,18 @@ const LAND_STYLES = {
   '社会福利用地': 'rgba(254, 24, 201, 0.6)'
 }
 
+// 根据设施类型返回服务半径（米）
+function getRadiusByType(type) {
+  const map = {
+    '幼儿园': 300, '小学': 500, '初中': 1000,
+    '九年一贯制学校': 1000, '医院': 1000,
+    '社区健康服务中心': 500, '社区体育设施': 500,
+    '社区文化设施': 500, '大型体育设施': 1500,
+    '大型文化设施': 1500
+  };
+  return map[type] || 300;
+}
+
 export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defaultBuildingColor, layers, activeBasemapId) {
   const vectorStore = useVectorStore();
   const viewer = ref(null);
@@ -720,10 +732,12 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     // 构建内容 HTML
     let html = `<h4>${properties.name || '未命名'}</h4>`;
     if (properties.level !== undefined) {
+      // 设施点：显示属性 + 服务覆盖分析按钮
       html += `<p><strong>设施级别：</strong>${properties.level || '-'}</p>`;
       html += `<p><strong>设施类型：</strong>${properties.type || '-'}</p>`;
       html += `<p><strong>建筑面积：</strong>${properties.floor_area || 0}平方米</p>`;
       html += `<p><strong>服务规模：</strong>${properties.scale || 0}人</p>`;
+      html += `<button class="analysis-btn" id="service-btn">服务覆盖分析</button>`;
     } else if (properties.site_area !== undefined) {
       html += `<p><strong>用地类型：</strong>${properties.type || '-'}</p>`;
       html += `<p><strong>用地面积：</strong>${properties.site_area || 0}平方米</p>`;
@@ -747,6 +761,32 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     // 更新内容
     contentWrapper.innerHTML = html;
 
+    // 如果是设施点，绑定服务覆盖分析按钮
+    const btn = cesiumPopupDiv.querySelector('#service-btn');
+    if (btn) {
+      btn.onclick = () => {
+        const [lng, lat] = properties.geometry?.coordinates || [];
+        if (!lng || !lat) return;
+        const radius = getRadiusByType(properties.type);
+        clearAnalysisGraphics();
+        drawServiceRadius(Cesium, viewer.value, lng, lat, radius, '#2196F3', analysisEntities);
+        viewer.value.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(lng, lat, radius * 6),
+          duration: 2.5
+        });
+        closeCesiumPopup();
+
+        // 按 Esc 退出覆盖分析
+        const onEsc = (e) => {
+          if (e.key === 'Escape') {
+            clearAnalysisGraphics();
+            document.removeEventListener('keydown', onEsc);
+          }
+        };
+        document.addEventListener('keydown', onEsc);
+      };
+    }
+
     // 定位并显示
     cesiumPopupDiv.style.left = `${screenPosition.x + 15}px`;
     cesiumPopupDiv.style.top = `${screenPosition.y}px`;
@@ -757,6 +797,22 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     if (cesiumPopupDiv) {
       cesiumPopupDiv.style.display = 'none';
     }
+  }
+
+  // 回到初始视角（中止所有操作）
+  function resetView() {
+    clearAnalysisGraphics();
+    hideAnalysisPanel();
+    resetAnalysisState();
+    viewer.value.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(114.03, 22.58, 1800),
+      orientation: {
+        heading: Cesium.Math.toRadians(-10),
+        pitch: Cesium.Math.toRadians(-30),
+        roll: 0
+      },
+      duration: 1.5
+    });
   }
 
   return {
@@ -770,5 +826,6 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     loadPointsAndLands,
     closeCesiumPopup,
     analysisButtonText,
+    resetView,
   };
 }

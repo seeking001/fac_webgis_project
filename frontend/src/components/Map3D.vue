@@ -96,7 +96,8 @@ const {
   handleAnalysisClick,
   loadPointsAndLands,
   closeCesiumPopup,
-  analysisButtonText
+  analysisButtonText,
+  resetView
 } = useMap3D(
   cesiumContainer,
   props.tiandituApiKey,
@@ -116,6 +117,7 @@ defineExpose({
   loadPointsAndLands,
   closeCesiumPopup,
   analysisButtonText,
+  resetView,
   layers,
   toggleLayer,
   onTypeChange
@@ -223,5 +225,17 @@ onUnmounted(() => {
 
 .popup-content-wrapper-3d {
   /* 可留空，或添加内边距等 */
+}
+
+.analysis-btn {
+  margin-top: 6px; padding: 3px 0; width: 100%;
+  background: #2196F3; color: #fff;
+  border: none; border-radius: 3px;
+  font-size: 12px; cursor: pointer;
+  transition: background 0.2s;
+}
+
+.analysis-btn:hover {
+  background: #1976D2;
 }
 </style>

@@ -57,6 +57,7 @@
       :analysisButtonText="analysisButtonText"
       @flythrough="onFlythrough"
       @analysis="onAnalysis"
+      @resetview="onResetView"
     />
   </div>
 </template>
@@ -152,6 +153,10 @@ function onFlythrough() {
 
 function onAnalysis() {
   map3DRef.value?.handleAnalysisClick()
+}
+
+function onResetView() {
+  map3DRef.value?.resetView()
 }
 </script>
 
