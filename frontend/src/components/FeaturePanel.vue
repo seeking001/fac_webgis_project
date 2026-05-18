@@ -23,9 +23,10 @@
       <div class="layer-panel">
         <h4>三维展示</h4>
         <div class="control-group">
-          <button @click="$emit('resetview')" class="fly-btn">初始视角</button>
+          <button @click="$emit('resetview')" class="fly-btn">初视角</button>
           <button @click="$emit('flythrough')" class="fly-btn">漫游飞行</button>
           <button @click="$emit('analysis')" class="fly-btn">{{ analysisButtonText }}</button>
+          <button @click="$emit('recommend')" class="fly-btn">选址推荐</button>
         </div>
       </div>
     </div>

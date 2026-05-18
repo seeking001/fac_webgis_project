@@ -97,7 +97,8 @@ const {
   loadPointsAndLands,
   closeCesiumPopup,
   analysisButtonText,
-  resetView
+  resetView,
+  showRecommendedSites
 } = useMap3D(
   cesiumContainer,
   props.tiandituApiKey,
@@ -118,6 +119,7 @@ defineExpose({
   closeCesiumPopup,
   analysisButtonText,
   resetView,
+  showRecommendedSites,
   layers,
   toggleLayer,
   onTypeChange

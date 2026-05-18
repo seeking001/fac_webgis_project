@@ -44,3 +44,6 @@ export async function deleteLands(id) {
 export async function getEducationSupply() {
   return request('/analysis/education-supply')
 }
+export async function getRecommendedSites(type, radius) {
+  return request(`/analysis/recommend-sites?type=${type}&radius=${radius}`)
+}

@@ -58,6 +58,7 @@
       @flythrough="onFlythrough"
       @analysis="onAnalysis"
       @resetview="onResetView"
+      @recommend="onRecommend"
     />
   </div>
 </template>
@@ -157,6 +158,10 @@ function onAnalysis() {
 
 function onResetView() {
   map3DRef.value?.resetView()
+}
+
+function onRecommend() {
+  map3DRef.value?.showRecommendedSites()
 }
 </script>
 

@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue';
 import { getPointIcon, drawHalfCylinder, drawServiceRadius, rippleIntervals } from '@/utils/cesiumHelper';
-import { getEducationSupply } from '@/services/api';
+import { getEducationSupply, getRecommendedSites } from '@/services/api';
 import { useVectorStore } from '@/stores/vectorStore';
 
 // 常量定义--设施用地颜色样式
@@ -51,6 +51,7 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
 
   let educationSupplyData = [];
   let analysisEntities = [];
+  let recommendEntities = [];
 
   const analysisButtonText = computed(() => {
     if (isAnalyzing.value) {
@@ -453,6 +454,69 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     }
   }
 
+  // ==================== 选址推荐 ====================
+  // 生成绿色定位图标
+  function drawPinCanvas(color) {
+    const c = document.createElement('canvas');
+    c.width = 28; c.height = 36;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(14, 12, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(14, 36); ctx.lineTo(8, 18); ctx.lineTo(20, 18); ctx.closePath(); ctx.fill();
+    return c;
+  }
+
+  function clearRecommendEntities() {
+    recommendEntities.forEach(e => viewer.value.entities.remove(e));
+    recommendEntities = [];
+  }
+
+  async function showRecommendedSites() {
+    // 选择推荐类型
+    const map = { '1': '幼儿园', '2': '小学', '3': '初中' };
+    const input = prompt('选择推荐设施类型:\n1: 幼儿园(300m)\n2: 小学(500m)\n3: 初中(1000m)', '1');
+    const type = map[input];
+    if (!type) return;
+
+    const radius = type === '幼儿园' ? 300 : type === '小学' ? 500 : 1000;
+    const { data: sites } = await getRecommendedSites(type, radius);
+    if (!sites?.length) { alert('暂无推荐选址'); return; }
+
+    clearRecommendEntities();
+    const color = '#e040fb';
+    sites.forEach((site, i) => {
+      const entity = viewer.value.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(site.lng, site.lat, 10),
+        billboard: {
+          image: drawPinCanvas(color),
+          scale: 1.2,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        },
+        label: {
+          text: `推荐 #${i + 1} (${Math.round(site.area)}㎡)`,
+          font: '14px "Microsoft YaHei", Arial, sans-serif',
+          fillColor: Cesium.Color.fromCssColorString(color),
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+          pixelOffset: new Cesium.Cartesian2(16, 0),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        }
+      });
+      recommendEntities.push(entity);
+    });
+
+    const last = sites[sites.length - 1];
+    viewer.value.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(last.lng, last.lat, 5000),
+      duration: 2
+    });
+  }
+
   async function handleAnalysisClick() {
     if (!viewer.value) return;
 
@@ -682,7 +746,7 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   }
 
   function clearAnalysisGraphics() {
-    // 清除波纹动画定时器
+    clearRecommendEntities();
     rippleIntervals.forEach(interval => clearInterval(interval));
     rippleIntervals.length = 0;
 
@@ -802,6 +866,7 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   // 回到初始视角（中止所有操作）
   function resetView() {
     clearAnalysisGraphics();
+    clearRecommendEntities();
     hideAnalysisPanel();
     resetAnalysisState();
     viewer.value.camera.flyTo({
@@ -826,6 +891,7 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     loadPointsAndLands,
     closeCesiumPopup,
     analysisButtonText,
+    showRecommendedSites,
     resetView,
   };
 }
