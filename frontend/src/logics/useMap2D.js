@@ -162,15 +162,24 @@ export function useMap2D(mapContainer, basemaps) {
     const storeData = layerKey === 'points' ? vectorStore.points : vectorStore.lands
     const isPoint = layerKey === 'points'
 
-    const filteredData = layerObj.selectedType === '全部类型' ? storeData : storeData.filter(item => item.type === layerObj.selectedType)
+    const filteredData = layerObj.selectedType === '全部类型'
+      ? storeData
+      : storeData.filter(item => item.type === layerObj.selectedType)
     const source = new VectorSource()
 
     filteredData.forEach(item => {
-      const geom = isPoint ? new Point(fromLonLat(item.geometry.coordinates)) : new Polygon(item.geometry.coordinates).transform('EPSG:4326', 'EPSG:3857')
-      const props = { id: item.id, name: item.name, layerType: layerKey }
-      if (isPoint) Object.assign(props, { level: item.level, type: item.type, floor_area: item.floor_area, scale: item.scale })
-      else Object.assign(props, { type: item.type, site_area: item.site_area })
-      source.addFeature(new Feature({ geometry: geom, ...props }))
+      const geom = isPoint
+        ? new Point(fromLonLat(item.geometry.coordinates))
+        : new Polygon(item.geometry.coordinates).transform('EPSG:4326', 'EPSG:3857')
+
+      source.addFeature(new Feature({
+        geometry: geom,
+        id: item.id, name: item.name, layerType: layerKey,
+        // 点要素和面要素有不同属性，用展开运算符合并
+        ...(isPoint
+          ? { level: item.level, type: item.type, floor_area: item.floor_area, scale: item.scale }
+          : { type: item.type, site_area: item.site_area })
+      }))
     })
 
     if (layerObj.layer) map.value.removeLayer(layerObj.layer)
@@ -193,7 +202,7 @@ export function useMap2D(mapContainer, basemaps) {
       new Style({ text: new Text({ text: icon, font: 'bold 16px Arial' }) }),
       new Style({ text: new Text({ text: name, font: '14px Arial', textAlign: 'left', offsetX: 12, textBaseline: 'middle', stroke: new Stroke({ color: '#fff', width: 1 }) }) })
     ];
-    POINT_STYLE_CACHE[type] = styles;;
+    POINT_STYLE_CACHE[type] = styles;
     return styles;
   }
 

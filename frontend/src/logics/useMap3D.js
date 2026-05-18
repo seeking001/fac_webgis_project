@@ -1,5 +1,5 @@
-import { ref, computed, watch } from 'vue';
-import { getPointIcon, drawHalfCylinder, drawServiceRadius } from '@/utils/cesiumHelper';
+import { ref, computed } from 'vue';
+import { getPointIcon, drawHalfCylinder, drawServiceRadius, rippleIntervals } from '@/utils/cesiumHelper';
 import { getEducationSupply } from '@/services/api';
 import { useVectorStore } from '@/stores/vectorStore';
 
@@ -20,16 +20,17 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   const vectorStore = useVectorStore();
   const viewer = ref(null);
   const cesiumInitialized = ref(false);
-  const buildingDataSource = ref(null);
+  // 实体管理
   let pointEntities = [];
   let landEntities = [];
-  let cesiumPopupDiv = null;
-  let cesiumWatcher = null;
   let lastHighlighted = null;
-  let buildingDataMap = {};  // 用于存储建筑数据以支持点击拾取显示属性
+  let buildingDataMap = {};  // 建筑 Primitive 点击回查
+
+  // 3D 弹窗
+  let cesiumPopupDiv = null;
+  let cesiumPopupCloseBtn = null;
 
   let Cesium = null;
-  let cesiumPopupCloseBtn = null;
 
   let isFlying = false;
   const isAnalyzing = ref(false);
@@ -669,10 +670,9 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   }
 
   function clearAnalysisGraphics() {
-    if (window.rippleIntervals) {
-      window.rippleIntervals.forEach(interval => clearInterval(interval));
-      window.rippleIntervals = [];
-    }
+    // 清除波纹动画定时器
+    rippleIntervals.forEach(interval => clearInterval(interval));
+    rippleIntervals.length = 0;
 
     // 移除所有分析图形（柱体、波纹、标注）
     const entities = viewer.value?.entities;

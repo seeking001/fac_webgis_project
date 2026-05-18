@@ -122,15 +122,6 @@ function transform(geomColumn, targetSRID) {
   return `ST_Transform(${geomColumn}, ${targetSRID})`
 }
 
-/**
- * 生成空间索引查询提示（PostgreSQL）
- * @param {string} indexName - 索引名称
- * @returns {string} 索引提示（空字符串，PostgreSQL 自动使用索引）
- */
-function useIndex() {
-  return ''
-}
-
 module.exports = {
   pointToWKT,
   polygonToWKT,
@@ -142,6 +133,5 @@ module.exports = {
   area,
   centroid,
   asGeoJSON,
-  transform,
-  useIndex
+  transform
 }
