@@ -1,5 +1,8 @@
-// 图标缓存，避免重复创建样式
+// ==================== 图标缓存 ====================
 const iconCache = {}
+
+// 波纹动画定时器列表（模块级，避免全局变量泄漏）
+export const rippleIntervals = []
 
 // 设施类型对应的图标
 const ICON_MAP = {
@@ -55,7 +58,7 @@ export function getPointIcon(type) {
   return canvas
 }
 
-// 漫游分析函数6 -- 教育设施供需分析 -- 绘制半圆柱体
+// ==================== 供需分析 - 绘制半圆柱体 ====================
 export function drawHalfCylinder(Cesium, viewer, lng, lat, height, color, startAngle, endAngle) {
   const radius = 30;  // 半径（米）
   const segments = 20; // 分段数
@@ -81,8 +84,6 @@ export function drawHalfCylinder(Cesium, viewer, lng, lat, height, color, startA
       ),
       extrudedHeight: height,
       material: Cesium.Color.fromCssColorString(color).withAlpha(0.6),
-      // outline: true,
-      // outlineColor: Cesium.Color.WHITE,
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
       extrudedHeightReference: Cesium.HeightReference.RELATIVE_TO_GROUND
     }
@@ -90,7 +91,7 @@ export function drawHalfCylinder(Cesium, viewer, lng, lat, height, color, startA
   return polygon;
 }
 
-// 漫游分析函数7 -- 教育设施供需分析 -- 绘制服务半径圆盘（动态波纹效果）
+// ==================== 供需分析 - 服务半径波纹动效 ====================
 export function drawServiceRadius(Cesium, viewer, lng, lat, maxRadius, color, analysisEntities) {
   if (!maxRadius || isNaN(maxRadius) || maxRadius <= 0) {
     console.warn('drawServiceRadius: 无效的半径', maxRadius);
@@ -202,6 +203,5 @@ export function drawServiceRadius(Cesium, viewer, lng, lat, maxRadius, color, an
     }
   }, 80);
 
-  if (!window.rippleIntervals) window.rippleIntervals = [];
-  window.rippleIntervals.push(interval);
+  rippleIntervals.push(interval);
 }

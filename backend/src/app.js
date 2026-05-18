@@ -33,22 +33,14 @@ app.use('/api/buildings', buildingRoutes);
 // 供需分析路由
 app.use('/api/analysis', analysisRoutes);
 
-// 创建服务器启动函数
-const startServer = async () => {
-  // 测试数据库连接
+// 启动服务
+(async () => {
   try {
     await testConnection();
     console.log('✅ 数据库连接成功');
+    app.listen(PORT, () => console.log(`✅ 服务启动完成，端口：${PORT}`));
   } catch (error) {
     console.error('❌ 数据库连接失败', error);
     process.exit(1);
   }
-
-  // 启动HTTP服务
-  app.listen(PORT, () => {
-    console.log(`✅ 服务启动完成，端口：${PORT}，等待前端请求...`);
-  });
-};
-
-// 启动服务
-startServer();
+})();

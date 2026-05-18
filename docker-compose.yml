@@ -34,22 +34,6 @@ services:
     networks:
       - fac_network
 
-  geoserver:
-    image: kartoza/geoserver # 一个流行的、维护良好的GeoServer Docker镜像
-    container_name: fac_geoserver
-    ports:
-      - "8080:8080" # 将本地的8080端口映射到容器的8080端口
-    volumes:
-      - E:\Projects\fac_webgis_project\database\GeoServer:/geodata
-    environment:
-      GEOSERVER_ADMIN_USER: fac_admin
-      GEOSERVER_ADMIN_PASSWORD: 666666
-    restart: unless-stopped
-    depends_on:
-      - postgres
-    networks:
-      - fac_network
-
   # 后端服务
   backend:
     container_name: fac_backend
@@ -98,8 +82,8 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data: # 声明数据卷，确保数据库数据持久化
-  geoserver_data:
+  postgres_data:
+    # 声明数据卷，确保数据库数据持久化
 
 
 networks:

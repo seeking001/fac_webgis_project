@@ -53,10 +53,15 @@ const LAND_STYLES = {
   '社会福利用地': 'rgba(254, 24, 201, 0.6)'
 }
 
+// Style 缓存（模块级，只在文件加载时创建一次）
+const POINT_STYLE_CACHE = new Map();
+const LAND_STYLE_CACHE = new Map();
+
 // 导出二维地图
 export function useMap2D(mapContainer, basemaps) {
   // 地图实例
   const map = ref(null)
+
   // 矢量图层配置
   const layers = ref({
     points: {
@@ -157,15 +162,24 @@ export function useMap2D(mapContainer, basemaps) {
     const storeData = layerKey === 'points' ? vectorStore.points : vectorStore.lands
     const isPoint = layerKey === 'points'
 
-    const filteredData = layerObj.selectedType === '全部类型' ? storeData : storeData.filter(item => item.type === layerObj.selectedType)
+    const filteredData = layerObj.selectedType === '全部类型'
+      ? storeData
+      : storeData.filter(item => item.type === layerObj.selectedType)
     const source = new VectorSource()
 
     filteredData.forEach(item => {
-      const geom = isPoint ? new Point(fromLonLat(item.geometry.coordinates)) : new Polygon(item.geometry.coordinates).transform('EPSG:4326', 'EPSG:3857')
-      const props = { id: item.id, name: item.name, layerType: layerKey }
-      if (isPoint) Object.assign(props, { level: item.level, type: item.type, floor_area: item.floor_area, scale: item.scale })
-      else Object.assign(props, { type: item.type, site_area: item.site_area })
-      source.addFeature(new Feature({ geometry: geom, ...props }))
+      const geom = isPoint
+        ? new Point(fromLonLat(item.geometry.coordinates))
+        : new Polygon(item.geometry.coordinates).transform('EPSG:4326', 'EPSG:3857')
+
+      source.addFeature(new Feature({
+        geometry: geom,
+        id: item.id, name: item.name, layerType: layerKey,
+        // 点要素和面要素有不同属性，用展开运算符合并
+        ...(isPoint
+          ? { level: item.level, type: item.type, floor_area: item.floor_area, scale: item.scale }
+          : { type: item.type, site_area: item.site_area })
+      }))
     })
 
     if (layerObj.layer) map.value.removeLayer(layerObj.layer)
@@ -178,17 +192,32 @@ export function useMap2D(mapContainer, basemaps) {
 
   // ==================== 样式函数 ====================
   function createPointsStyle(feature) {
-    const icon = POINT_STYLES[feature.get('type')] || '📍'
-    const name = feature.get('name') || ''
-    return [
+    const type = feature.get('type');
+    if (POINT_STYLE_CACHE[type]) {
+      return POINT_STYLE_CACHE[type];
+    }
+    const icon = POINT_STYLES[type] || '📍';
+    const name = feature.get('name') || '';
+    const styles = [
       new Style({ text: new Text({ text: icon, font: 'bold 16px Arial' }) }),
       new Style({ text: new Text({ text: name, font: '14px Arial', textAlign: 'left', offsetX: 12, textBaseline: 'middle', stroke: new Stroke({ color: '#fff', width: 1 }) }) })
-    ]
+    ];
+    POINT_STYLE_CACHE[type] = styles;
+    return styles;
   }
 
   function createLandsStyle(feature) {
-    const color = LAND_STYLES[feature.get('type')] || 'rgba(0, 0, 0, 0.6)'
-    return new Style({ fill: new Fill({ color }), stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.2)', width: 1.5 }) })
+    const type = feature.get('type');
+    if (LAND_STYLE_CACHE[type]) {
+      return LAND_STYLE_CACHE[type];
+    }
+    const color = LAND_STYLES[type] || 'rgba(0, 0, 0, 0.6)';
+    const style = new Style({
+      fill: new Fill({ color }),
+      stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.2)', width: 1.5 })
+    });
+    LAND_STYLE_CACHE[type] = style;
+    return style;
   }
 
   // 高亮样式函数
