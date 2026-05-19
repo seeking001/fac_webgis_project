@@ -483,13 +483,13 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     if (!sites?.length) { alert('暂无推荐选址'); return; }
 
     clearRecommendEntities();
-    const color = '#e040fb';
+    const color = '#fe18c9';
     sites.forEach((site, i) => {
       const entity = viewer.value.entities.add({
         position: Cesium.Cartesian3.fromDegrees(site.lng, site.lat, 10),
         billboard: {
           image: drawPinCanvas(color),
-          scale: 1.2,
+          scale: 1,
           verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
           horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
           disableDepthTestDistance: Number.POSITIVE_INFINITY

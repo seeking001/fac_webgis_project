@@ -225,10 +225,6 @@ onUnmounted(() => {
   background: rgba(120, 0, 180, 1);
 }
 
-.popup-content-wrapper-3d {
-  /* 可留空，或添加内边距等 */
-}
-
 .analysis-btn {
   margin-top: 6px; padding: 3px 0; width: 100%;
   background: #2196F3; color: #fff;
