@@ -98,7 +98,8 @@ const {
   closeCesiumPopup,
   analysisButtonText,
   resetView,
-  showRecommendedSites
+  showRecommendedSites,
+  toggleServiceRadii
 } = useMap3D(
   cesiumContainer,
   props.tiandituApiKey,
@@ -122,7 +123,8 @@ defineExpose({
   showRecommendedSites,
   layers,
   toggleLayer,
-  onTypeChange
+  onTypeChange,
+  toggleServiceRadii
 })
 
 // 当激活底图变为三维时，加载 Cesium

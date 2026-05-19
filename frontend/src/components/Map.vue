@@ -59,6 +59,7 @@
       @analysis="onAnalysis"
       @resetview="onResetView"
       @recommend="onRecommend"
+      @radius="onRadius"
     />
   </div>
 </template>
@@ -162,6 +163,10 @@ function onResetView() {
 
 function onRecommend() {
   map3DRef.value?.showRecommendedSites()
+}
+
+function onRadius() {
+  map3DRef.value?.toggleServiceRadii()
 }
 
 // 切换到三维时，同步二维图层的加载状态到三维

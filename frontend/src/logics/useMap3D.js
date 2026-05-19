@@ -311,6 +311,7 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   }
 
   async function loadPointsAndLands(currentLayers) {
+    if (!viewer.value) return;
     const layersToUse = currentLayers || layers?.value || layers;
     const pointsConfig = layersToUse.points;
     const landsConfig = layersToUse.lands;
@@ -890,6 +891,54 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     });
   }
 
+  // ==================== 服务半径覆盖 ====================
+  let radiusEntities = [];
+
+  function clearRadiusEntities() {
+    radiusEntities.forEach(e => viewer.value?.entities.remove(e));
+    radiusEntities = [];
+  }
+
+  function drawServiceRadii(filterType) {
+    clearRadiusEntities();
+    const pts = vectorStore.points;
+    if (!pts.length || !layers.value?.points?.visible) return;
+
+    const sel = layers.value.points.selectedType;
+    let filtered = sel === '全部类型' ? pts : pts.filter(p => p.type === sel);
+    if (filterType) filtered = filtered.filter(p => p.type === filterType);
+
+    filtered.forEach(p => {
+      const [lng, lat] = p.geometry.coordinates;
+      const radius = getRadiusByType(p.type) || 300;
+      if (!radius) return;
+      const e = viewer.value.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+        ellipse: {
+          semiMinorAxis: radius, semiMajorAxis: radius,
+          material: Cesium.Color.fromCssColorString('rgba(48,158,255,0.12)'),
+          outline: true,
+          outlineColor: Cesium.Color.fromCssColorString('rgba(48,158,255,0.35)'),
+          height: 1.5, extrudedHeight: 4
+        }
+      });
+      radiusEntities.push(e);
+    });
+  }
+
+  function toggleServiceRadii() {
+    if (radiusEntities.length) { clearRadiusEntities(); return; }
+    if (!layers.value?.points?.visible) { alert('请先在二维地图中加载显示设施点'); return; }
+    const TYPE_MAP = { '1': '幼儿园', '2': '小学', '3': '初中', '4': '九年一贯制学校', '5': '医院' };
+    const input = prompt(
+      '选择覆盖分析类型:\n1: 幼儿园(300m)\n2: 小学(500m)\n3: 初中(1000m)\n' +
+      '4: 九年一贯制(1000m)\n5: 医院(1000m)\n其他: 显示当前筛选全部', '1');
+    const type = TYPE_MAP[input];
+    if (!type && input !== null) { drawServiceRadii(); return; }
+    if (!type) return;
+    drawServiceRadii(type);
+  }
+
   return {
     viewer,
     cesiumInitialized,
@@ -903,5 +952,6 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     analysisButtonText,
     showRecommendedSites,
     resetView,
+    toggleServiceRadii,
   };
 }

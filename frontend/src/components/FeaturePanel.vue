@@ -26,6 +26,9 @@
           <button @click="$emit('resetview')" class="fly-btn" :disabled="!is3dMode">初视角</button>
           <button @click="$emit('flythrough')" class="fly-btn" :disabled="!is3dMode">漫游飞行</button>
           <button @click="$emit('analysis')" class="fly-btn" :disabled="!is3dMode">{{ analysisButtonText }}</button>
+        </div>
+        <div class="control-group" style="margin-top: 0;">
+          <button @click="$emit('radius')" class="fly-btn" :disabled="!is3dMode">覆盖分析</button>
           <button @click="$emit('recommend')" class="fly-btn" :disabled="!is3dMode">选址推荐</button>
         </div>
       </div>
@@ -222,7 +225,7 @@ const props = defineProps({
   activeBasemapId: { type: String, required: true }
 })
 
-const emit = defineEmits(['flythrough', 'analysis'])
+const emit = defineEmits(['flythrough', 'analysis', 'recommend', 'resetview', 'radius'])
 
 const vectorStore = useVectorStore()
 
