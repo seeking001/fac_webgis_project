@@ -64,7 +64,7 @@
 </template>
 
 <script setup>
-import { ref, computed, markRaw } from 'vue'
+import { ref, computed, watch, markRaw } from 'vue'
 import TileLayer from 'ol/layer/Tile'
 import XYZ from 'ol/source/XYZ'
 import Map2D from './Map2D.vue'
@@ -163,6 +163,20 @@ function onResetView() {
 function onRecommend() {
   map3DRef.value?.showRecommendedSites()
 }
+
+// 切换到三维时，同步二维图层的加载状态到三维
+watch(activeBasemapId, (newId) => {
+  if (newId !== '3d' || !map2DRef.value?.layers || !map3DRef.value?.layers) return
+  const src = map2DRef.value.layers
+  const dst = map3DRef.value.layers
+  for (const k of ['points', 'lands']) {
+    if (src[k] && dst[k]) {
+      dst[k].visible = src[k].visible
+      dst[k].loaded = src[k].loaded
+      dst[k].selectedType = src[k].selectedType
+    }
+  }
+})
 </script>
 
 <style scoped>

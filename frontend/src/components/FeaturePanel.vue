@@ -6,16 +6,16 @@
       <div class="layer-panel" v-for="(config, key) in layers" :key="key">
         <h4>{{ config.name }}</h4>
         <div class="control-group">
-          <input type="checkbox" v-model="config.visible" @change="toggleLayer(key)">
+          <input type="checkbox" v-model="config.visible" @change="toggleLayer(key)" :disabled="is3dMode">
           <span>加载显示</span>
-          <select v-model="config.selectedType" @change="onTypeChange(key)" :disabled="!config.visible">
+          <select v-model="config.selectedType" @change="onTypeChange(key)" :disabled="!config.visible || is3dMode">
             <option v-for="type in config.types" :value="type.value">{{ type.label }}</option>
           </select>
         </div>
         <div class="control-group">
-          <button @click="startDrawing(key)" :disabled="!config.visible">绘制</button>
-          <button @click="handleImport(key)" :disabled="!config.visible">导入</button>
-          <button @click="handleExport(key)" :disabled="!config.visible">导出</button>
+          <button @click="startDrawing(key)" :disabled="!config.visible || is3dMode">绘制</button>
+          <button @click="handleImport(key)" :disabled="!config.visible || is3dMode">导入</button>
+          <button @click="handleExport(key)" :disabled="!config.visible || is3dMode">导出</button>
         </div>
       </div>
 
@@ -23,10 +23,10 @@
       <div class="layer-panel">
         <h4>三维展示</h4>
         <div class="control-group">
-          <button @click="$emit('resetview')" class="fly-btn">初视角</button>
-          <button @click="$emit('flythrough')" class="fly-btn">漫游飞行</button>
-          <button @click="$emit('analysis')" class="fly-btn">{{ analysisButtonText }}</button>
-          <button @click="$emit('recommend')" class="fly-btn">选址推荐</button>
+          <button @click="$emit('resetview')" class="fly-btn" :disabled="!is3dMode">初视角</button>
+          <button @click="$emit('flythrough')" class="fly-btn" :disabled="!is3dMode">漫游飞行</button>
+          <button @click="$emit('analysis')" class="fly-btn" :disabled="!is3dMode">{{ analysisButtonText }}</button>
+          <button @click="$emit('recommend')" class="fly-btn" :disabled="!is3dMode">选址推荐</button>
         </div>
       </div>
     </div>
@@ -226,17 +226,13 @@ const emit = defineEmits(['flythrough', 'analysis'])
 
 const vectorStore = useVectorStore()
 
-// 从 map2DRef 中获取所需的数据和方法
 const map2D = computed(() => props.map2DRef)
 const mapInstance = computed(() => map2D.value?.map)
-// 根据当前模式动态获取 layers
+// 始终以二维地图图层为权威来源（三维同步其状态）
 const layers = computed(() => {
-  if (props.activeBasemapId === '3d') {
-    return props.map3DRef?.layers || { points: {}, lands: {} }
-  } else {
-    return props.map2DRef?.layers || { points: {}, lands: {} }
-  }
+  return props.map2DRef?.layers || { points: {}, lands: {} }
 })
+const is3dMode = computed(() => props.activeBasemapId === '3d')
 
 // 使用要素操作逻辑
 const {
@@ -277,7 +273,17 @@ function haversine(lng1, lat1, lng2, lat2) {
 const dashboardData = computed(() => {
   const points = vectorStore.points;
   const lands = vectorStore.lands.filter(l => l.type === '居住用地');
-  if (!points.length || !lands.length) return [];
+
+  const metrics = [
+    { types: ['幼儿园'], radius: 300, target: 0.9, label: '幼儿园300m' },
+    { types: ['小学', '九年一贯制学校'], radius: 500, target: 0.9, label: '小学500m' },
+    { types: ['初中', '九年一贯制学校'], radius: 1000, target: 0.9, label: '初中1000m' }
+  ];
+
+  // 无设施点数据 → 全部显示未发现
+  if (!points.length) {
+    return metrics.map(m => ({ ...m, value: 0, status: 'no_data', icon: '—' }));
+  }
 
   // 获取居住用地质心
   const landCenters = lands.map(l => {
@@ -287,15 +293,10 @@ const dashboardData = computed(() => {
     return { center: sum, area: l.site_area || 0 };
   });
 
-  const metrics = [
-    { types: ['幼儿园'], radius: 300, target: 0.9, label: '幼儿园300m' },
-    { types: ['小学', '九年一贯制学校'], radius: 500, target: 0.9, label: '小学500m' },
-    { types: ['初中', '九年一贯制学校'], radius: 1000, target: 0.9, label: '初中1000m' }
-  ];
-
   return metrics.map(m => {
     const facs = points.filter(p => m.types.includes(p.type));
     if (!facs.length) return { ...m, value: 0, status: 'no_data', icon: '—' };
+    if (!lands.length) return { ...m, value: 0, status: 'no_data', icon: '—' };
 
     const covered = landCenters.reduce((sum, lc) => {
       const ok = facs.some(f =>
@@ -317,21 +318,32 @@ const dashboardData = computed(() => {
   });
 });
 
-// 图层操作（调用 map2DRef 和 map3DRef 的方法）
+// 图层操作：仅在二维模式下操作，自动同步状态到三维
 const toggleLayer = (key) => {
-  // 根据当前激活的地图类型调用对应的方法
-  if (props.activeBasemapId === '3d') {
-    props.map3DRef?.toggleLayer(key)
-  } else {
-    props.map2DRef?.toggleLayer(key)
+  if (is3dMode.value) return  // 三维模式下不允许操作加载显示
+  props.map2DRef?.toggleLayer(key)
+  // 同步加载状态到三维
+  const src = props.map2DRef?.layers?.[key]
+  const dst = props.map3DRef?.layers?.[key]
+  if (src && dst) {
+    dst.visible = src.visible
+    dst.loaded = src.loaded
+    dst.selectedType = src.selectedType
+    if (props.map3DRef?.loadPointsAndLands) {
+      props.map3DRef.loadPointsAndLands(props.map3DRef.layers)
+    }
   }
 }
 
 const onTypeChange = (key) => {
-  if (props.activeBasemapId === '3d') {
-    props.map3DRef?.onTypeChange(key)
-  } else {
-    props.map2DRef?.onTypeChange(key)
+  if (is3dMode.value) return
+  props.map2DRef?.onTypeChange(key)
+  // 同步筛选状态到三维
+  if (props.map3DRef?.layers?.[key]) {
+    props.map3DRef.layers[key].selectedType = props.map2DRef?.layers?.[key]?.selectedType
+    if (props.map3DRef?.loadPointsAndLands) {
+      props.map3DRef.loadPointsAndLands(props.map3DRef.layers)
+    }
   }
 }
 </script>

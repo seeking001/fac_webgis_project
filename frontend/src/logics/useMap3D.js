@@ -472,6 +472,11 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   }
 
   async function showRecommendedSites() {
+    // 选址推荐依赖二维地图加载的数据
+    if (!layers.value?.points?.visible || !vectorStore.points.length) {
+      alert('未检测到设施点数据，请先在二维地图中加载显示设施点');
+      return;
+    }
     // 选择推荐类型
     const map = { '1': '幼儿园', '2': '小学', '3': '初中' };
     const input = prompt('选择推荐设施类型:\n1: 幼儿园(300m)\n2: 小学(500m)\n3: 初中(1000m)', '1');
@@ -528,6 +533,11 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   }
 
   async function startAnalysisSession() {
+    // 分析依赖二维地图加载的数据
+    if (!layers.value?.points?.visible || !vectorStore.points.length) {
+      alert('未检测到设施点数据，请先在二维地图中加载显示设施点');
+      return;
+    }
     clearAnalysisGraphics();
 
     const facilities = educationSupplyData.filter(f =>
