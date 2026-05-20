@@ -20,20 +20,6 @@ services:
       timeout: 5s
       retries: 5
 
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: fac_pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@fac.com # 设置你的邮箱
-      PGADMIN_DEFAULT_PASSWORD: 666666 # 设置pgAdmin登录密码
-    ports:
-      - "5050:80" # pgAdmin访问端口
-    restart: unless-stopped
-    depends_on:
-      - postgres
-    networks:
-      - fac_network
-
   # 后端服务
   backend:
     container_name: fac_backend

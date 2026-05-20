@@ -96,7 +96,10 @@ const {
   handleAnalysisClick,
   loadPointsAndLands,
   closeCesiumPopup,
-  analysisButtonText
+  analysisButtonText,
+  resetView,
+  showRecommendedSites,
+  toggleServiceRadii
 } = useMap3D(
   cesiumContainer,
   props.tiandituApiKey,
@@ -116,9 +119,12 @@ defineExpose({
   loadPointsAndLands,
   closeCesiumPopup,
   analysisButtonText,
+  resetView,
+  showRecommendedSites,
   layers,
   toggleLayer,
-  onTypeChange
+  onTypeChange,
+  toggleServiceRadii
 })
 
 // 当激活底图变为三维时，加载 Cesium
@@ -221,7 +227,15 @@ onUnmounted(() => {
   background: rgba(120, 0, 180, 1);
 }
 
-.popup-content-wrapper-3d {
-  /* 可留空，或添加内边距等 */
+.analysis-btn {
+  margin-top: 6px; padding: 3px 0; width: 100%;
+  background: #2196F3; color: #fff;
+  border: none; border-radius: 3px;
+  font-size: 12px; cursor: pointer;
+  transition: background 0.2s;
+}
+
+.analysis-btn:hover {
+  background: #1976D2;
 }
 </style>

@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue';
 import { getPointIcon, drawHalfCylinder, drawServiceRadius, rippleIntervals } from '@/utils/cesiumHelper';
-import { getEducationSupply } from '@/services/api';
+import { getEducationSupply, getRecommendedSites } from '@/services/api';
 import { useVectorStore } from '@/stores/vectorStore';
 
 // 常量定义--设施用地颜色样式
@@ -14,6 +14,18 @@ const LAND_STYLES = {
   '医疗卫生用地': 'rgba(254, 24, 201, 0.6)',
   '教育设施用地': 'rgba(254, 24, 201, 0.6)',
   '社会福利用地': 'rgba(254, 24, 201, 0.6)'
+}
+
+// 根据设施类型返回服务半径（米）
+function getRadiusByType(type) {
+  const map = {
+    '幼儿园': 300, '小学': 500, '初中': 1000,
+    '九年一贯制学校': 1000, '医院': 1000,
+    '社区健康服务中心': 500, '社区体育设施': 500,
+    '社区文化设施': 500, '大型体育设施': 1500,
+    '大型文化设施': 1500
+  };
+  return map[type] || 300;
 }
 
 export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defaultBuildingColor, layers, activeBasemapId) {
@@ -39,6 +51,7 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
 
   let educationSupplyData = [];
   let analysisEntities = [];
+  let recommendEntities = [];
 
   const analysisButtonText = computed(() => {
     if (isAnalyzing.value) {
@@ -298,6 +311,7 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   }
 
   async function loadPointsAndLands(currentLayers) {
+    if (!viewer.value) return;
     const layersToUse = currentLayers || layers?.value || layers;
     const pointsConfig = layersToUse.points;
     const landsConfig = layersToUse.lands;
@@ -441,6 +455,74 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     }
   }
 
+  // ==================== 选址推荐 ====================
+  // 生成绿色定位图标
+  function drawPinCanvas(color) {
+    const c = document.createElement('canvas');
+    c.width = 28; c.height = 36;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(14, 12, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(14, 36); ctx.lineTo(8, 18); ctx.lineTo(20, 18); ctx.closePath(); ctx.fill();
+    return c;
+  }
+
+  function clearRecommendEntities() {
+    recommendEntities.forEach(e => viewer.value.entities.remove(e));
+    recommendEntities = [];
+  }
+
+  async function showRecommendedSites() {
+    // 选址推荐依赖二维地图加载的数据
+    if (!layers.value?.points?.visible || !vectorStore.points.length) {
+      alert('未检测到设施点数据，请先在二维地图中加载显示设施点');
+      return;
+    }
+    // 选择推荐类型
+    const map = { '1': '幼儿园', '2': '小学', '3': '初中' };
+    const input = prompt('选择推荐设施类型:\n1: 幼儿园(300m)\n2: 小学(500m)\n3: 初中(1000m)', '1');
+    const type = map[input];
+    if (!type) return;
+
+    const radius = type === '幼儿园' ? 300 : type === '小学' ? 500 : 1000;
+    const { data: sites } = await getRecommendedSites(type, radius);
+    if (!sites?.length) { alert('暂无推荐选址'); return; }
+
+    clearRecommendEntities();
+    const color = '#fe18c9';
+    sites.forEach((site, i) => {
+      const entity = viewer.value.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(site.lng, site.lat, 10),
+        billboard: {
+          image: drawPinCanvas(color),
+          scale: 1,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        },
+        label: {
+          text: `推荐 #${i + 1} (${Math.round(site.area)}㎡)`,
+          font: '14px "Microsoft YaHei", Arial, sans-serif',
+          fillColor: Cesium.Color.fromCssColorString(color),
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+          pixelOffset: new Cesium.Cartesian2(16, 0),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        }
+      });
+      recommendEntities.push(entity);
+    });
+
+    const last = sites[sites.length - 1];
+    viewer.value.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(last.lng, last.lat, 5000),
+      duration: 2
+    });
+  }
+
   async function handleAnalysisClick() {
     if (!viewer.value) return;
 
@@ -452,6 +534,11 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   }
 
   async function startAnalysisSession() {
+    // 分析依赖二维地图加载的数据
+    if (!layers.value?.points?.visible || !vectorStore.points.length) {
+      alert('未检测到设施点数据，请先在二维地图中加载显示设施点');
+      return;
+    }
     clearAnalysisGraphics();
 
     const facilities = educationSupplyData.filter(f =>
@@ -670,7 +757,7 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
   }
 
   function clearAnalysisGraphics() {
-    // 清除波纹动画定时器
+    clearRecommendEntities();
     rippleIntervals.forEach(interval => clearInterval(interval));
     rippleIntervals.length = 0;
 
@@ -720,10 +807,12 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     // 构建内容 HTML
     let html = `<h4>${properties.name || '未命名'}</h4>`;
     if (properties.level !== undefined) {
+      // 设施点：显示属性 + 服务覆盖分析按钮
       html += `<p><strong>设施级别：</strong>${properties.level || '-'}</p>`;
       html += `<p><strong>设施类型：</strong>${properties.type || '-'}</p>`;
       html += `<p><strong>建筑面积：</strong>${properties.floor_area || 0}平方米</p>`;
       html += `<p><strong>服务规模：</strong>${properties.scale || 0}人</p>`;
+      html += `<button class="analysis-btn" id="service-btn">服务覆盖分析</button>`;
     } else if (properties.site_area !== undefined) {
       html += `<p><strong>用地类型：</strong>${properties.type || '-'}</p>`;
       html += `<p><strong>用地面积：</strong>${properties.site_area || 0}平方米</p>`;
@@ -747,6 +836,32 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     // 更新内容
     contentWrapper.innerHTML = html;
 
+    // 如果是设施点，绑定服务覆盖分析按钮
+    const btn = cesiumPopupDiv.querySelector('#service-btn');
+    if (btn) {
+      btn.onclick = () => {
+        const [lng, lat] = properties.geometry?.coordinates || [];
+        if (!lng || !lat) return;
+        const radius = getRadiusByType(properties.type);
+        clearAnalysisGraphics();
+        drawServiceRadius(Cesium, viewer.value, lng, lat, radius, '#2196F3', analysisEntities);
+        viewer.value.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(lng, lat, radius * 6),
+          duration: 2.5
+        });
+        closeCesiumPopup();
+
+        // 按 Esc 退出覆盖分析
+        const onEsc = (e) => {
+          if (e.key === 'Escape') {
+            clearAnalysisGraphics();
+            document.removeEventListener('keydown', onEsc);
+          }
+        };
+        document.addEventListener('keydown', onEsc);
+      };
+    }
+
     // 定位并显示
     cesiumPopupDiv.style.left = `${screenPosition.x + 15}px`;
     cesiumPopupDiv.style.top = `${screenPosition.y}px`;
@@ -757,6 +872,71 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     if (cesiumPopupDiv) {
       cesiumPopupDiv.style.display = 'none';
     }
+  }
+
+  // 回到初始视角（中止所有操作）
+  function resetView() {
+    clearAnalysisGraphics();
+    clearRecommendEntities();
+    hideAnalysisPanel();
+    resetAnalysisState();
+    viewer.value.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(114.03, 22.58, 1800),
+      orientation: {
+        heading: Cesium.Math.toRadians(-10),
+        pitch: Cesium.Math.toRadians(-30),
+        roll: 0
+      },
+      duration: 1.5
+    });
+  }
+
+  // ==================== 服务半径覆盖 ====================
+  let radiusEntities = [];
+
+  function clearRadiusEntities() {
+    radiusEntities.forEach(e => viewer.value?.entities.remove(e));
+    radiusEntities = [];
+  }
+
+  function drawServiceRadii(filterType) {
+    clearRadiusEntities();
+    const pts = vectorStore.points;
+    if (!pts.length || !layers.value?.points?.visible) return;
+
+    const sel = layers.value.points.selectedType;
+    let filtered = sel === '全部类型' ? pts : pts.filter(p => p.type === sel);
+    if (filterType) filtered = filtered.filter(p => p.type === filterType);
+
+    filtered.forEach(p => {
+      const [lng, lat] = p.geometry.coordinates;
+      const radius = getRadiusByType(p.type) || 300;
+      if (!radius) return;
+      const e = viewer.value.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+        ellipse: {
+          semiMinorAxis: radius, semiMajorAxis: radius,
+          material: Cesium.Color.fromCssColorString('rgba(48,158,255,0.12)'),
+          outline: true,
+          outlineColor: Cesium.Color.fromCssColorString('rgba(48,158,255,0.35)'),
+          height: 1.5, extrudedHeight: 4
+        }
+      });
+      radiusEntities.push(e);
+    });
+  }
+
+  function toggleServiceRadii() {
+    if (radiusEntities.length) { clearRadiusEntities(); return; }
+    if (!layers.value?.points?.visible) { alert('请先在二维地图中加载显示设施点'); return; }
+    const TYPE_MAP = { '1': '幼儿园', '2': '小学', '3': '初中', '4': '九年一贯制学校', '5': '医院' };
+    const input = prompt(
+      '选择覆盖分析类型:\n1: 幼儿园(300m)\n2: 小学(500m)\n3: 初中(1000m)\n' +
+      '4: 九年一贯制(1000m)\n5: 医院(1000m)\n其他: 显示当前筛选全部', '1');
+    const type = TYPE_MAP[input];
+    if (!type && input !== null) { drawServiceRadii(); return; }
+    if (!type) return;
+    drawServiceRadii(type);
   }
 
   return {
@@ -770,5 +950,8 @@ export function useMap3D(cesiumContainer, TIANDITU_API_KEY, buildingColors, defa
     loadPointsAndLands,
     closeCesiumPopup,
     analysisButtonText,
+    showRecommendedSites,
+    resetView,
+    toggleServiceRadii,
   };
 }

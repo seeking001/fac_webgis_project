@@ -321,9 +321,35 @@ async function getFacilityHeatmap(minLng, minLat, maxLng, maxLat, facilityType =
   }
 }
 
+/**
+ * 推荐设施选址：找未被该类型设施覆盖的最大居住用地
+ */
+async function getRecommendedSites(facilityType, radius = 300, limit = 3) {
+  const query = `
+    SELECT
+      ST_X(ST_Centroid(rl.geom)) AS lng,
+      ST_Y(ST_Centroid(rl.geom)) AS lat,
+      rl.name,
+      ROUND(ST_Area(rl.geom::geography)) AS area
+    FROM lands rl
+    WHERE rl.type = '居住用地'
+      AND NOT EXISTS (
+        SELECT 1 FROM points p
+        WHERE p.type = $1
+          AND ST_DWithin(p.geom::geography, rl.geom::geography, $2)
+      )
+      AND ST_Area(rl.geom::geography) > 5000
+    ORDER BY ST_Area(rl.geom::geography) DESC
+    LIMIT $3
+  `;
+  const result = await pool.query(query, [facilityType, radius, limit]);
+  return result.rows;
+}
+
 module.exports = {
   getEducationSupply,
   getFacilityServiceArea,
   getDistanceBetweenFacilities,
-  getFacilityHeatmap
+  getFacilityHeatmap,
+  getRecommendedSites
 }

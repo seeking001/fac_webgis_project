@@ -193,17 +193,19 @@ export function useMap2D(mapContainer, basemaps) {
   // ==================== 样式函数 ====================
   function createPointsStyle(feature) {
     const type = feature.get('type');
-    if (POINT_STYLE_CACHE[type]) {
-      return POINT_STYLE_CACHE[type];
-    }
     const icon = POINT_STYLES[type] || '📍';
     const name = feature.get('name') || '';
-    const styles = [
-      new Style({ text: new Text({ text: icon, font: 'bold 16px Arial' }) }),
-      new Style({ text: new Text({ text: name, font: '14px Arial', textAlign: 'left', offsetX: 12, textBaseline: 'middle', stroke: new Stroke({ color: '#fff', width: 1 }) }) })
-    ];
-    POINT_STYLE_CACHE[type] = styles;
-    return styles;
+    // 图标按类型缓存（同一类型图标相同）
+    let iconStyle = POINT_STYLE_CACHE[type];
+    if (!iconStyle) {
+      iconStyle = new Style({ text: new Text({ text: icon, font: 'bold 16px Arial' }) });
+      POINT_STYLE_CACHE[type] = iconStyle;
+    }
+    // 名称每个要素独立（不缓存）
+    const labelStyle = new Style({
+      text: new Text({ text: name, font: '14px Arial', textAlign: 'left', offsetX: 12, textBaseline: 'middle', stroke: new Stroke({ color: '#fff', width: 1 }) })
+    });
+    return [iconStyle, labelStyle];
   }
 
   function createLandsStyle(feature) {
